@@ -66,6 +66,7 @@ type inference =
                 Axiom
                 | TopIntro | BottomElim | LinOneElim | LinOneIntro
                 | Assumption of string
+                | Law of string
                 | ValidAssumption of string
                 | CtxProof
                 (* Conjunctions *)

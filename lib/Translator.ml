@@ -23,6 +23,7 @@ let rec substitue oldname new_expr expr =
   | Predicate (n, e) -> Predicate (n, (List.map rr e))
   | ForAll (n, t, e) -> ForAll(n, t, (rr e))
   | Exists (n, t, e) -> Exists(n, t, (rr e))
+  | EvaluationContext ((e, t), (v, t2)) -> EvaluationContext((rr e, t), (rr v, t2))
   | x -> x
 
 let rec substitue_proofs oldname new_expr {con=c; term={judge=j;exp=e}; inf=i} = match !i with
@@ -267,6 +268,8 @@ let nat_to_curry ?(strict=true) (p: proof) : proof =
     | Inference((BottomElim), [pf1]) ->
       let (used2, trP1) = nat_to_curry_with_used used pf1 in
       used2, (make_proof c CurryExpr.(abortTyped trP1.term.exp (expr_to_type e)) AbortIntro [trP1])
+    | Inference((Law "Peirce"), []) ->
+      used, (make_proof c (Utils.is_type CallCC (expr_to_type e)) CCIntro [])
     | NoInference
     | Deduction _ 
       ->

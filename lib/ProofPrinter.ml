@@ -110,6 +110,12 @@ module LatexPrinter (Type: ProofType) = struct
 \end{document}
 |}
 
+  let wrap_landscape = Format.asprintf {|
+  \begin{landscape}
+  %s
+  \end{landscape}
+  |}
+
   let cat sep strF prfs = String.concat sep (List.map strF prfs)
 
   let quad strF = cat " \\quad " strF

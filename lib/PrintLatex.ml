@@ -24,6 +24,11 @@ let precedence = function
   | CtxExp _ -> 7
   | Case _ -> 8
 
+let type_precedence = function
+  | UnitType | BottomType | NoType | NamedType _ -> 0
+  | Prod _ | Sum _ -> 1
+  | Func _ -> 2
+
 let expr_is_atomic (e: expr) = (precedence e) = 0;;
 let type_is_atomic (e: ty) = match e with
 | NamedType _ | UnitType | BottomType -> true
@@ -32,6 +37,8 @@ let type_is_atomic (e: ty) = match e with
 
 let lt_prec l r = (precedence l) < (precedence r);;
 let le_prec l r = (precedence l) <= (precedence r);;
+let ty_lt_prec l r = (type_precedence l) < (type_precedence r);;
+let ty_le_prec l r = (type_precedence l) <= (type_precedence r);;
 
 
 let rec expr_latex (e: expr) =
@@ -53,7 +60,7 @@ let rec expr_latex (e: expr) =
     | Pair (l, r) -> Format.asprintf "\\langle %s, %s \\rangle" (inner false l) (inner false r)
     | First n -> "\\text{fst }" ^ (inner (lt_prec e n) n)
     | Second n -> "\\text{snd }" ^ (inner (lt_prec e n) n)
-    | Application (l, r) -> Format.asprintf "%s\\ %s" (inner (le_prec e l) l) (inner (lt_prec e r) r)
+    | Application (l, r) -> Format.asprintf "%s\\ %s" (inner (lt_prec e l) l) (inner (le_prec e r) r)
     | Lambda (arg, body) -> Format.asprintf "\\lambda %s.%s" (arg) (inner false body)
     | Case (pred, (x1, b1), (x2, b2)) -> 
       Format.asprintf 
@@ -100,9 +107,9 @@ and type_latex (t: ty) =
   | NamedType x -> x
   | UnitType -> "\\top"
   | BottomType -> "\\bot"
-  | Sum (l, r) -> Format.asprintf "%s + %s" (inner true l) (inner true r)
-  | Prod (l, r) -> Format.asprintf "%s \\times %s" (inner true l) (inner true r)
-  | Func (l, r) -> Format.asprintf "%s \\rightarrow %s" (inner true l) (inner true r)
+  | Sum (l, r) -> Format.asprintf "%s + %s" (inner (ty_le_prec t l) l) (inner (ty_le_prec t r) r)
+  | Prod (l, r) -> Format.asprintf "%s \\times %s" (inner (ty_le_prec t l) l) (inner (ty_le_prec t r) r)
+  | Func (l, r) -> Format.asprintf "%s \\rightarrow %s" (inner (ty_le_prec t l) l) (inner (ty_lt_prec t r) r)
   | NoType -> failwith ("Try to print NoType Latex")
   in wrap_paran (wrap && (not (type_is_atomic t))) base)
 in inner false t
@@ -133,6 +140,7 @@ and context_stmt_latex_base connection ctx st = match ctx with
 let inference_latex (i: inference) = match i with
   (* Axioms *)
   | Axiom -> ""
+  | Law x                                 -> "\\text{"^x^"}"
   | TopIntro                              -> "\\top I"
   | BottomElim                            -> "\\bot E"
   | LinOneElim                            -> "\\mathbb{1}E"
