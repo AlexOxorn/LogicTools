@@ -30,6 +30,11 @@ let exprToOcaml e =
     (Format.asprintf "%s| InjL %s -> %s\n" (indentStr (indent+1)) ln (inner (indent+1) le)) ^
     (Format.asprintf "%s| InjR %s -> %s\n" (indentStr (indent+1)) rn (inner (indent+1) re)) ^
     (Format.asprintf "%s)" (indentStr indent))
+  | Abort -> "raise "
+  | Bottom -> "Not_found"
+  | LetPair (x, y, p, b) -> Format.asprintf "let (%s, %s) = %s in\n%s%s"
+    x y (inner (indent+1) p)
+    (indentStr indent) (inner (indent+1) b)
   | _ -> "failwith(\"Invalid Source\")"
 in universalHeader ^ "let f = " ^ (inner 0 e) ^ ";;"
 

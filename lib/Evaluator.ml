@@ -40,19 +40,39 @@ let find_unique_var e =
 
 let rec reduce (e: expr) = 
 let open ExprUtils.CurryExpr in
+ Printf.eprintf "%s\n--------------------------\n"
+ (PrettyPrinter.literal_expr e);
 match e with
-| Pair(l, r) -> Pair(reduce l, reduce r)
+| Pair(l, r) -> 
+  let p, l2 = is_value l in
+  if not p then Pair(l2, r) else
+  Pair(l, reduce r)
 | InjectLeft(l, r) -> InjectLeft(l, reduce r)
 | InjectRight(l, r) -> InjectRight(l, reduce r)
-| First(Pair(l, _)) -> reduce l
-| Second(Pair(_, r)) -> reduce r
+| First(Pair(l, _)) -> l
+| Second(Pair(_, r)) -> r
+| Lambda (x, b) -> Lambda (x, reduce b)
 | First(e) -> First(reduce e)
 | Second(e) -> Second(reduce e)
-| Application (Lambda(arg, body), r) -> Translator.substitue arg (reduce r) body
-| Application (l, r) -> Application(reduce l, reduce r)
-| Case (InjectLeft (_, l), (arg, body), _) -> Translator.substitue arg (reduce l) body
-| Case (InjectRight (_, r), _, (arg, body)) -> Translator.substitue arg (reduce r) body
-| Case (c, (argL, l), (argR, r)) -> Case(reduce c, (argL, reduce l), (argR, reduce r))
+| LetPair(x, y, Pair(l, r), body) -> 
+  Translator.(body |> substitute x l |> substitute y r)
+| LetPair(x, y, p, body) -> 
+  let vp, np = is_value p in
+  if not vp then LetPair(x, y, np, body) else
+  LetPair(x, y, np, reduce body)
+| Application (Lambda(arg, body), r) -> Translator.substitute arg (r) body
+| Application (l, r) -> 
+  let p, l2 = is_value l in
+  if not p then Application(l2, r) else
+  Application(l, reduce r)
+| Case (InjectLeft (_, l), (arg, body), _) -> Translator.substitute arg (l) body
+| Case (InjectRight (_, r), _, (arg, body)) -> Translator.substitute arg (r) body
+| Case (c, ((argL, l) as ll), ((argR, r) as rr)) -> 
+  let cv, cp = is_value c in 
+  if not cv then Case(cp, ll, rr) else
+  let lv, lp = is_value l in 
+  if not lv then Case(c, (argL, lp), rr) else
+  Case(c, ll, (argR, reduce r))
 | EvaluationContext((_, et) as c, (Application(CallCC, m), t) ) ->
   (match (is_value m) with 
     | true, _ -> let x = find_unique_var m in

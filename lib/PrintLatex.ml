@@ -18,11 +18,15 @@ let precedence = function
     -> 2
   | And _| NAnd _ | Or _ | Nor _
   | LinAndProd _ | LinAndSum _ 
-  | LinOrProd _ | LinOrSum _ -> 4
-  | ForAll _ | Exists _ | Lambda _ -> 5
-  | Impl _ | Let _ | LinImpl _-> 6
+  | LinOrProd _ | LinOrSum _ 
+    -> 4
+  | ForAll _ | Exists _ | Lambda _ 
+  | Case _
+    -> 5
+  | Impl _ | Let _ | LinImpl _ | LetPair _
+    -> 6
   | CtxExp _ -> 7
-  | Case _ -> 8
+  (* | _ -> 8 *)
 
 let type_precedence = function
   | UnitType | BottomType | NoType | NamedType _ -> 0
@@ -60,14 +64,18 @@ let rec expr_latex (e: expr) =
     | Pair (l, r) -> Format.asprintf "\\langle %s, %s \\rangle" (inner false l) (inner false r)
     | First n -> "\\text{fst }" ^ (inner (lt_prec e n) n)
     | Second n -> "\\text{snd }" ^ (inner (lt_prec e n) n)
-    | Application (l, r) -> Format.asprintf "%s\\ %s" (inner (lt_prec e l) l) (inner (le_prec e r) r)
-    | Lambda (arg, body) -> Format.asprintf "\\lambda %s.%s" (arg) (inner false body)
+    | Application (l, r) -> Format.asprintf "%s\\ %s" (inner (le_prec e l) l) (inner (le_prec e r) r)
+    | Lambda (arg, body) -> Format.asprintf "\\lambda %s.%s" (arg) (inner (lt_prec e body) body)
     | Case (pred, (x1, b1), (x2, b2)) -> 
       Format.asprintf 
         "\\text{Case } %s \\text{ of inj}_l\\ %s \\Rightarrow %s \\ |\\text{ inj}_r\\ %s \\Rightarrow %s"
-        (inner false pred) x1 (inner (8 = precedence b1) b1) x2 (inner (8 = precedence b2) b2)
-    | InjectLeft (t, n) -> Format.asprintf "\\text{inj}_l^{%s} %s" (type_latex t) (inner (lt_prec e n) n)
-    | InjectRight (t, n) -> Format.asprintf "\\text{inj}_r^{%s} %s" (type_latex t) (inner (lt_prec e n) n)
+        (inner (le_prec e pred) pred) x1 (inner (le_prec e b1) b1) x2 (inner (le_prec e b2) b2)
+    | InjectLeft (t, n) -> Format.asprintf "\\text{inj}_l^{%s} %s" (type_latex ~strict:false t) (inner (le_prec e n) n)
+    | InjectRight (t, n) -> Format.asprintf "\\text{inj}_r^{%s} %s" (type_latex ~strict:false t) (inner (le_prec e n) n)
+    | LetPair (l, r, p, b) -> Format.asprintf "\\text{let } %s = %s \\text{ in } %s"
+        (inner false (Pair(Name l, Name r)))
+        (inner (lt_prec e p) p)
+        (inner (le_prec e b) b)
     
     (* First Order *)
     | Predicate (n, e) -> Format.asprintf "%s(%s)" (n) (e |> List.map (inner false) |> String.concat ", ")
@@ -101,7 +109,7 @@ let rec expr_latex (e: expr) =
     | EvaluationContext ((l,_), (r,_)) -> Format.asprintf "%s[%s]" (inner (lt_prec e l) l) (inner false r)
     in wrap_paran (wrap && (not (expr_is_atomic e))) base)
   in inner false e
-and type_latex (t: ty) =   
+and type_latex ?(strict=true) (t: ty) =   
   let rec inner wrap (t: ty) = 
   (let base = match t with
   | NamedType x -> x
@@ -110,7 +118,8 @@ and type_latex (t: ty) =
   | Sum (l, r) -> Format.asprintf "%s + %s" (inner (ty_le_prec t l) l) (inner (ty_le_prec t r) r)
   | Prod (l, r) -> Format.asprintf "%s \\times %s" (inner (ty_le_prec t l) l) (inner (ty_le_prec t r) r)
   | Func (l, r) -> Format.asprintf "%s \\rightarrow %s" (inner (ty_le_prec t l) l) (inner (ty_lt_prec t r) r)
-  | NoType -> failwith ("Try to print NoType Latex")
+  | NoType -> 
+    if strict then failwith ("Try to print NoType Latex") else ""
   in wrap_paran (wrap && (not (type_is_atomic t))) base)
 in inner false t
 and judgement_latex (j: judgement) = match j with

@@ -19,6 +19,7 @@ type expr =
           | InjectLeft of ty * expr
           | InjectRight of ty * expr
           | Case of expr * (string * expr) * (string * expr)
+          | LetPair of string * string * expr * expr
           (* First Order *)
           | Predicate of string * (expr list)
           | ForAll of string * ty * expr

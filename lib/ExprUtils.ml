@@ -69,6 +69,8 @@ module CurryExpr = struct
   let (/->) x body = Lambda(x, body);;
   let ( @- ) l r = Application(l, r);;
   let abort x = Application(Abort, x);;
+  let let_pair x y p b = LetPair(x, y, p, b);;
+  let case m ln lb rn rb = Case (m, (ln, lb), (rn, rb))
   
 
   let ( * ) (l: ty) (r: ty) = Prod(l, r);;

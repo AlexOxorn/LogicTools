@@ -108,7 +108,7 @@ module NatDedSolver(Ctx: ContextFunctions) =
     | {con=c; term={exp=ForAll(n, t, e); judge=j}; _} ->
         let (new_var, _) = (find_valid_name vars c) in
         let new_ctx = wrap_context ctxName (Ctx.add_var new_var (TypeOf t) c) in
-        let to_return = [make_partial_e new_ctx (substitue n (Name new_var) e) j] in
+        let to_return = [make_partial_e new_ctx (substitute n (Name new_var) e) j] in
         p.inf := Inference (ForAllIntro (new_var), to_return);
         to_return
     | _ -> failwith "Bad Split";;
@@ -209,7 +209,7 @@ module SeqSolver(Ctx: ContextFunctions) =
         to_return
       | {con=c; term={exp=ForAll(x, t, e); judge=j}; _} -> 
         let (new_var, _) = (find_valid_name vars c) in
-        let new_right = substitue x (Name new_var) e in
+        let new_right = substitute x (Name new_var) e in
         let new_ctx = wrap_context ctxName (Ctx.add_var new_var (TypeOf t) c) in 
         let to_return = [make_partial_e new_ctx new_right j] in
         p.inf := Inference (ForAllRight new_var, to_return);
@@ -256,7 +256,7 @@ module SeqSolver(Ctx: ContextFunctions) =
             | _ -> failwith (Format.asprintf "variable %s is not the correct type" a)
           ) in
           let (new_var1, _) = (find_valid_name vars c) in
-          let new_ctx1 = wrap_context ctxName (Ctx.add new_var1 (make_term (substitue x (sub_expr) pred) j) c) in
+          let new_ctx1 = wrap_context ctxName (Ctx.add new_var1 (make_term (substitute x (sub_expr) pred) j) c) in
           let to_return = [make_partial_e new_ctx1 e j] in
           p.inf := Inference ((ForAllLeft (variable, a, new_var1)), to_return);
           to_return

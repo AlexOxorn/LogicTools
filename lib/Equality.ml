@@ -29,6 +29,17 @@ and expr_eq_b (l: expr) (r: expr) = match (l, r) with
 | (LinOrProd (ll, lr)), (LinOrProd (rl, rr))
 | (EvaluationContext ((ll, _), (lr, _))), (EvaluationContext ((rl, _),(rr, _)))
 | (Impl (ll, lr)), (Impl (rl, rr)) -> (expr_eq_b ll rl) && (expr_eq_b lr rr) 
+| (LetPair (lln, lrn, lp, lb), LetPair (rln, rrn, rp, rb)) -> 
+    (lln = rln) &&
+    (lrn = rrn) &&
+    (expr_eq_b lp rp) &&
+    (expr_eq_b lb rb) 
+| (Case (m, (lln, llb), (lrn,lrb)), Case(n, (rln, rlb), (rrn, rrb))) ->
+    (expr_eq_b m n) &&
+    (lln = rln) &&
+    (lrn = rrn) &&
+    (expr_eq_b llb rlb) &&
+    (expr_eq_b lrb rrb) 
 | (Not l), (Not r) -> expr_eq_b l r
 | (Bang l), (Bang r) -> expr_eq_b l r
 | (First l), (First r) -> expr_eq_b l r
@@ -40,7 +51,70 @@ and expr_eq_b (l: expr) (r: expr) = match (l, r) with
 | (Predicate (n1, exps1)), (Predicate (n2, _)) -> (n1 = n2)  && (List.for_all2 expr_eq_b exps1 exps1)
 | (ForAll (n1, ty1, e1)), (ForAll (n2, ty2, e2)) -> (n1 = n2) && (type_eq_b ty1 ty2) && (expr_eq_b e1 e2)
 | (Exists (n1, ty1, e1)), (Exists (n2, ty2, e2)) -> (n1 = n2) && (type_eq_b ty1 ty2) && (expr_eq_b e1 e2)
-| _ -> (*(Printf.eprintf "Unsupported Expression For Equality\n%s\n%s\n" (PrettyPrinter.pp_expr l) (PrettyPrinter.pp_expr r));*)
+| Top, _
+| Bottom, _
+| LinOne, _
+| Abort, _
+| Control, _
+| CallCC, _
+| Name _, _
+| And _, _
+| NAnd _, _
+| Or _, _
+| Pair _, _
+| Application _, _
+| LinAndSum _, _
+| LinAndProd _, _
+| LinImpl _, _
+| LinOrSum _, _
+| LinOrProd _, _
+| Impl _, _
+| LetPair _, _
+| Not _, _
+| Bang _, _
+| First _, _
+| Second _, _
+| Lambda _, _
+| InjectLeft _, _
+| InjectRight _, _
+| Box _, _
+| Predicate _, _
+| ForAll _, _
+| Exists _, _
+| Case _, _
+| _, Top
+| _, Bottom
+| _, LinOne
+| _, Abort
+| _, Control
+| _, CallCC
+| _, Name _
+| _, And _
+| _, NAnd _
+| _, Or _
+| _, Pair _
+| _, Application _
+| _, LinAndSum _
+| _, LinAndProd _
+| _, LinImpl _
+| _, LinOrSum _
+| _, LinOrProd _
+| _, Impl _
+| _, LetPair _
+| _, Not _
+| _, Bang _
+| _, First _
+| _, Second _
+| _, Lambda _
+| _, InjectLeft _
+| _, InjectRight _
+| _, Box _
+| _, Predicate _
+| _, ForAll _
+| _, Exists _ 
+| _, Case _
+  -> false
+| _ -> (Printf.eprintf "Unsupported Expression For Equality\n%s\n%s\n" (PrettyPrinter.pp_expr l) (PrettyPrinter.pp_expr r));
 false
 and judgement_eq_b (l: judgement) (r: judgement) = match (l, r) with
 | NoJudge, NoJudge
