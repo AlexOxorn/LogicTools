@@ -16,8 +16,10 @@ let rec substitute oldname new_expr expr =
   | Application (l, r) -> Application((rr l), (rr r))
   | Lambda (arg, body) -> 
     if arg = oldname
-    then Lambda (arg, body)
-    else Lambda (arg, (rr body))
+    then 
+      Lambda (arg, body)
+    else
+      Lambda (arg, (rr body))
   | LetPair (x, y, p, b) ->
     if (x = oldname || y = oldname) then LetPair (x, y, rr p, b)
     else LetPair (x, y, rr p, rr b)
@@ -30,7 +32,12 @@ let rec substitute oldname new_expr expr =
   | ForAll (n, t, e) -> ForAll(n, t, (rr e))
   | Exists (n, t, e) -> Exists(n, t, (rr e))
   | EvaluationContext ((e, t), (v, t2)) -> EvaluationContext((rr e, t), (rr v, t2))
-  | x -> x
+  | Top -> Top
+  | Bottom -> Bottom
+  | Abort -> Abort
+  | Control -> Control
+  | CallCC -> CallCC
+  | _ -> failwith (Format.asprintf "Subtitution failed for: %s" (PrettyPrinter.literal_expr expr))
 
 let rec substitute_proofs oldname new_expr {con=c; term={judge=j;exp=e}; inf=i} = match !i with
   | Inference (i, pfs) ->

@@ -13,6 +13,7 @@ let rec literal_expr ?(i=1) (e: expr) = match e with
 | Name a -> Format.asprintf("Name(%s)") a
 | Top -> "Top"
 | Bottom -> "Bottom"
+| Abort -> "Abort"
 | And (l, r) -> Format.asprintf "AND(\n%s%s,\n%s%s)" (indent i) (literal_expr ~i:(i+1) l) (indent i) (literal_expr ~i:(i+1) r)
 | NAnd (l, r) -> Format.asprintf "NAND(\n%s%s,\n%s%s)" (indent i) (literal_expr ~i:(i+1) l) (indent i) (literal_expr ~i:(i+1) r)
 | Or (l, r) -> Format.asprintf "OR(\n%s%s,\n%s%s)" (indent i) (literal_expr ~i:(i+1) l) (indent i) (literal_expr ~i:(i+1) r)

@@ -1,6 +1,6 @@
 open Structs
 
-let universalHeader = {|type ('a , 'b) inj = InjL of 'a | InjR of 'b;;
+let universalHeader = {|type ('a , 'b) either = Left of 'a | Right of 'b;;
 
 |}
 
@@ -22,13 +22,13 @@ let exprToOcaml e =
   | Second e -> Format.asprintf "(snd %s)" (inner indent e)
   | Application (l, r) -> Format.asprintf "(%s %s)" (inner indent l) (inner indent r)
   | Lambda (x, r) -> Format.asprintf "(fun %s -> %s)" x (inner indent r)
-  | InjectLeft (_, x) -> Format.asprintf "(InjL %s)" (inner indent x)
-  | InjectRight (_, x) -> Format.asprintf "(InjR %s)" (inner indent x)
+  | InjectLeft (_, x) -> Format.asprintf "(Left %s)" (inner indent x)
+  | InjectRight (_, x) -> Format.asprintf "(Right %s)" (inner indent x)
   | Case (x, (ln, le), (rn, re)) -> 
     (Format.asprintf "(\n") ^
     (Format.asprintf "%s match %s with\n" (indentStr indent) (inner indent x)) ^
-    (Format.asprintf "%s| InjL %s -> %s\n" (indentStr (indent+1)) ln (inner (indent+1) le)) ^
-    (Format.asprintf "%s| InjR %s -> %s\n" (indentStr (indent+1)) rn (inner (indent+1) re)) ^
+    (Format.asprintf "%s| Left %s -> %s\n" (indentStr (indent+1)) ln (inner (indent+1) le)) ^
+    (Format.asprintf "%s| Right %s -> %s\n" (indentStr (indent+1)) rn (inner (indent+1) re)) ^
     (Format.asprintf "%s)" (indentStr indent))
   | Abort -> "raise "
   | Bottom -> "Not_found"
@@ -36,7 +36,7 @@ let exprToOcaml e =
     x y (inner (indent+1) p)
     (indentStr indent) (inner (indent+1) b)
   | _ -> "failwith(\"Invalid Source\")"
-in universalHeader ^ "let f = " ^ (inner 0 e) ^ ";;"
+in universalHeader ^ "let ff = " ^ (inner 0 e) ^ ";;"
 
 let wrapMinted s = Format.asprintf {|
 \begin{minted}[
@@ -57,3 +57,4 @@ let wrapVerbatim s = Format.asprintf {|
 |} s
 
 let exprToLatex e = e |> exprToOcaml |> wrapMinted;;
+let exprToVerbatim e = e |> exprToOcaml |> wrapVerbatim;;
