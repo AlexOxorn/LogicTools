@@ -13,12 +13,13 @@ let rec type_eq_b (l : ty) (r : ty) =
 
 and expr_eq_b (l : expr) (r : expr) =
   match (l, r) with
-  | Top, Top | Bottom, Bottom -> true
-  | LinOne, LinOne -> true
-  | LinZero, LinZero -> true
-  | Abort, Abort -> true
-  | Control, Control -> true
-  | CallCC, CallCC -> true
+  | Top, Top | Bottom, Bottom
+  | LinOne, LinOne
+  | LinZero, LinZero
+  | Abort, Abort
+  | Control, Control
+  | CallCC, CallCC
+  | TypeUnit, TypeUnit -> true
   | Name a, Name b -> a = b
   | And (ll, lr), And (rl, rr)
   | NAnd (ll, lr), NAnd (rl, rr)
@@ -60,6 +61,7 @@ and expr_eq_b (l : expr) (r : expr) =
   | Abort, _
   | Control, _
   | CallCC, _
+  | TypeUnit, _
   | Name _, _
   | And _, _
   | NAnd _, _
@@ -90,6 +92,7 @@ and expr_eq_b (l : expr) (r : expr) =
   | _, LinOne
   | _, Abort
   | _, Control
+  | _, TypeUnit
   | _, CallCC
   | _, Name _
   | _, And _

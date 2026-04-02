@@ -85,6 +85,8 @@ module CurryExpr = struct
   let ( + ) (l : ty) (r : ty) = Sum (l, r)
   let top_ = TypeUnit
   let ( & ) = expr_bin_judge_combine ( &- ) (wrap_type_combination2 ( * ))
+  let left ?(t=NoType) e = InjectLeft(t, e)
+  let right ?(t=NoType) e = InjectRight(t, e)
 
   let ( ?< ) =
     expr_uni_judge_combine ( ?<- ) (wrap_type_combination1 extractLeft)

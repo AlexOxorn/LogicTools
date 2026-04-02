@@ -3,58 +3,6 @@ open Utils
 open ContextUtils
 open ExprUtils
 
-let rec substitute oldname new_expr expr =
-  let rr = substitute oldname new_expr in
-  match expr with
-  | Name x -> if x = oldname then new_expr else Name x
-  | And (l, r) -> And (rr l, rr r)
-  | Or (l, r) -> Or (rr l, rr r)
-  | Impl (l, r) -> Impl (rr l, rr r)
-  | Pair (l, r) -> Pair (rr l, rr r)
-  | First e -> First (rr e)
-  | Second e -> Second (rr e)
-  | Application (l, r) -> Application (rr l, rr r)
-  | Lambda (arg, body) ->
-      if arg = oldname then Lambda (arg, body) else Lambda (arg, rr body)
-  | LetPair (x, y, p, b) ->
-      if x = oldname || y = oldname then LetPair (x, y, rr p, b)
-      else LetPair (x, y, rr p, rr b)
-  | InjectLeft (t, e) -> InjectLeft (t, rr e)
-  | InjectRight (t, e) -> InjectRight (t, rr e)
-  | Case (x, (x1, b1), (x2, b2)) -> Case (rr x, (x1, rr b1), (x2, rr b2))
-  | Not e -> Not (rr e)
-  | NAnd (l, r) -> NAnd (rr l, rr r)
-  | Predicate (n, e) -> Predicate (n, List.map rr e)
-  | ForAll (n, t, e) -> ForAll (n, t, rr e)
-  | Exists (n, t, e) -> Exists (n, t, rr e)
-  | EvaluationContext ((e, t), (v, t2)) ->
-      EvaluationContext ((rr e, t), (rr v, t2))
-  | Top -> Top
-  | Bottom -> Bottom
-  | Abort -> Abort
-  | Control -> Control
-  | CallCC -> CallCC
-  | _ ->
-      failwith
-        (Format.asprintf "Subtitution failed for: %s"
-           (PrettyPrinter.literal_expr expr))
-
-let rec substitute_proofs oldname new_expr
-    { con = c; term = { judge = j; exp = e }; inf = i } =
-  match !i with
-  | Inference (i, pfs) ->
-      {
-        con = c;
-        term = { judge = j; exp = substitute oldname new_expr e };
-        inf =
-          ref (Inference (i, List.map (substitute_proofs oldname new_expr) pfs));
-      }
-  | _ ->
-      {
-        con = c;
-        term = { judge = j; exp = substitute oldname new_expr e };
-        inf = i;
-      }
 
 let rec trans (e : expr) : expr =
   match e with

@@ -12,7 +12,7 @@ let repeat_tailrec s n =
 
 let indentStr = repeat_tailrec "    "
 
-let exprToOcaml e =
+let exprToOcaml ?(withHeader=false) e =
   let rec inner indent e =
     match e with
     | Name a -> a
@@ -48,7 +48,8 @@ let exprToOcaml e =
           (inner (indent + 1) b)
     | _ -> "failwith(\"Invalid Source\")"
   in
-  universalHeader ^ "let ff = " ^ inner 0 e ^ ";;"
+  if withHeader then universalHeader ^ "let ff = " ^ inner 0 e ^ ";;"
+  else inner 0 e
 
 let wrapMinted s =
   Format.asprintf

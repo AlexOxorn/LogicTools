@@ -209,7 +209,7 @@ let check_flat_correctness (p : proof) =
       ],
       Truth ) ->
       type_eq ty ty2
-      &&@ lazy (expr_eq (Translator.substitute n e2 e) e1)
+      &&@ lazy (expr_eq (Evaluator.substitute n e2 e) e1)
       &&@ lazy (context_strict_equal c c1)
       &&@ lazy (context_strict_equal c c2)
   | ( c,
@@ -224,7 +224,7 @@ let check_flat_correctness (p : proof) =
         ConApp
           ( ConApp (c, VariableAssumption (var, TypeOf ty)),
             StmtAssumption
-              (sub, is_true (Translator.substitute n1 (Name var) ex)) )
+              (sub, is_true (Evaluator.substitute n1 (Name var) ex)) )
       in
       expr_eq res res2
       &&@
@@ -239,7 +239,7 @@ let check_flat_correctness (p : proof) =
         { con = c1; term = { exp = ForAll (n, ty1, allexp); _ }; _ };
       ],
       Truth ) ->
-      expr_eq res (Translator.substitute n e2 allexp)
+      expr_eq res (Evaluator.substitute n e2 allexp)
       &&@ lazy (type_eq ty1 ty2)
       &&@ lazy (context_strict_equal c c1)
       &&@ lazy (context_strict_equal c c2)
@@ -249,7 +249,7 @@ let check_flat_correctness (p : proof) =
       [ { con = c1; term = { exp = e1; _ }; _ } ],
       Truth ) ->
       let subcontext = ConApp (c, VariableAssumption (a, TypeOf ty)) in
-      expr_eq (Translator.substitute n (Name a) e) e1
+      expr_eq (Evaluator.substitute n (Name a) e) e1
       &&@ lazy (context_strict_equal subcontext c1)
   | c, e, j, p, _ -> Error (NoMatchingRule (c, e, j, p))
 

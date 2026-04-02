@@ -3,6 +3,7 @@ type expr =
   | Name of string
   | Top
   | Bottom
+  | Hole
   | And of expr * expr
   | NAnd of expr * expr
   | Or of expr * expr

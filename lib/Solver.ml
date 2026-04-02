@@ -1,7 +1,7 @@
 open Structs
-open Translator
 open Utils
 open ContextUtils
+open Evaluator
 
 let complete_proof p i = p.inf := i
 let make_inference p r ps = p.inf := Inference (r, ps)
