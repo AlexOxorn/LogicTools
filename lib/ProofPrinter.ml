@@ -5,36 +5,37 @@ let print_latex_full proof =
   print_string (compact_latex proof);
   print_endline "\\[";
   print_endline (proof_latex proof);
-  print_endline "\\]";;
+  print_endline "\\]"
 
 let print_seq_latex_full proof =
   print_string (compact_latex proof);
   print_endline "\\[";
   print_endline (seq_proof_latex proof);
-  print_endline "\\]";;
+  print_endline "\\]"
 
-let print_latex_relation proof1 proof2 = 
+let print_latex_relation proof1 proof2 =
   print_endline "\\[";
   print_endline (proof_latex proof1);
   print_endline "\\Rightarrow";
   print_endline (proof_latex proof2);
-  print_endline "\\]";;
+  print_endline "\\]"
 
 let print_multiple_latex f proofs =
   print_endline "\\[";
   print_endline (String.concat " \\quad\\quad " (List.map f proofs));
-  print_endline "\\]";;
+  print_endline "\\]"
 
 let print_latex_section name e =
-  print_endline (Format.asprintf "\\subsubsection*{%s: $%s$}" name (expr_latex e))
+  print_endline
+    (Format.asprintf "\\subsubsection*{%s: $%s$}" name (expr_latex e))
 
 let print_latex_section2 () =
   print_endline (Format.asprintf "\\subsubsection{}")
 
-let print_beluga proof = print_endline (proof_bel proof);;
-let print_beluga_with_map map proof= print_endline (proof_bel_base map proof);;
-let print_beluga_alt proof = print_endline (proof_bel_alt proof);;
-let print_beluga_seq proof = print_endline (proof_bel_base sym_map_seq proof);;
+let print_beluga proof = print_endline (proof_bel proof)
+let print_beluga_with_map map proof = print_endline (proof_bel_base map proof)
+let print_beluga_alt proof = print_endline (proof_bel_alt proof)
+let print_beluga_seq proof = print_endline (proof_bel_base sym_map_seq proof)
 
 let print_multiple_beluga f proofs =
   print_endline (proofs |> List.map f |> String.concat "\t")
@@ -42,11 +43,11 @@ let print_multiple_beluga f proofs =
 let as_latex prnt proof =
   print_endline "\\begin{verbatim}";
   prnt proof;
-  print_endline "\\end{verbatim}";;
+  print_endline "\\end{verbatim}"
 
 module type ProofType = sig
   val ctx_separator : string
-  val bel_mapping : (Structs.inference -> string)
+  val bel_mapping : Structs.inference -> string
 end
 
 module NatDed : ProofType = struct
@@ -64,7 +65,7 @@ module SeqCal : ProofType = struct
   let bel_mapping = sym_map_seq
 end
 
-module BelPrinter (Type: ProofType) = struct
+module BelPrinter (Type : ProofType) = struct
   let symbol_mapping = Type.bel_mapping
   let str = proof_bel_base symbol_mapping
   let cat sep prfs = String.concat sep (List.map str prfs)
@@ -73,16 +74,19 @@ module BelPrinter (Type: ProofType) = struct
   let space n = cat (String.make n ' ')
   let space4 = space 4
   let space8 = space 8
-  let as_latex strF prf = Format.asprintf "\\begin{verbatim}\n%s\n\\end{verbatim}" (strF prf)
+
+  let as_latex strF prf =
+    Format.asprintf "\\begin{verbatim}\n%s\n\\end{verbatim}" (strF prf)
 
   let print strF prf = print_endline (strF prf)
-  
 end
 
-module LatexPrinter (Type: ProofType) = struct
+module LatexPrinter (Type : ProofType) = struct
   (* Combinations *)
 
-  let doc_format = Format.asprintf {|
+  let doc_format =
+    Format.asprintf
+      {|
 \documentclass[fleqn]{article}
 \usepackage{graphicx} %% Required for inserting images
 \usepackage{proof}
@@ -110,14 +114,14 @@ module LatexPrinter (Type: ProofType) = struct
 \end{document}
 |}
 
-  let wrap_landscape = Format.asprintf {|
+  let wrap_landscape =
+    Format.asprintf {|
   \begin{landscape}
   %s
   \end{landscape}
   |}
 
   let cat sep strF prfs = String.concat sep (List.map strF prfs)
-
   let quad strF = cat " \\quad " strF
   let qquad strF = cat " \\qquad " strF
   let quad2 strF = cat " \\quad\\quad " strF
@@ -128,32 +132,44 @@ module LatexPrinter (Type: ProofType) = struct
   (* Proofs *)
   let proof = proof_latex_base Type.ctx_separator
   let math strF p = Format.asprintf "\\[\n%s\n\\]" (strF p)
-  let math_shrink strF p = Format.asprintf {|\begin{equation*}
+
+  let math_shrink strF p =
+    Format.asprintf
+      {|\begin{equation*}
 \resizebox{.9\hsize}{!} {
     $%s$
 }
-\end{equation*}|} (strF p)
+\end{equation*}|}
+      (strF p)
+
   let in_math strF p = Format.asprintf "$%s$" (strF p)
   let comp = compact_latex2
   let full p = Format.asprintf "%s\n%s" (comp p) (math proof p)
   let full_fit p = Format.asprintf "%s\n%s" (comp p) (math_shrink proof p)
 
-  let full_mini w p =  Format.asprintf "\\noindent\\begin{minipage}[b]{%f\\textwidth}\n%s%s\n\\end{minipage}" w (comp p) (math proof p)
+  let full_mini w p =
+    Format.asprintf
+      "\\noindent\\begin{minipage}[b]{%f\\textwidth}\n%s%s\n\\end{minipage}" w
+      (comp p) (math proof p)
 
   (* Others *)
   let expr = expr_latex
   let stmt = stmt_latex
 
   (* Enumeration *)
-  let enum s x = Format.asprintf "\\begin{enumerate}%s\n\\end{enumerate}" (x |> List.map(fun y -> "\\item " ^ (s y)) |> String.concat "\n")
-  let item s x = Format.asprintf "\\begin{itemize}%s\n\\end{itemize}" (x |> List.map(fun y -> "\\item " ^ (s y)) |> String.concat "\n")
+  let enum s x =
+    Format.asprintf "\\begin{enumerate}%s\n\\end{enumerate}"
+      (x |> List.map (fun y -> "\\item " ^ s y) |> String.concat "\n")
+
+  let item s x =
+    Format.asprintf "\\begin{itemize}%s\n\\end{itemize}"
+      (x |> List.map (fun y -> "\\item " ^ s y) |> String.concat "\n")
 
   let print strF prf = print_endline (strF prf)
 end
 
-module NatDedLatex = LatexPrinter(NatDed);;
-module NatDedBel = BelPrinter(NatDed);;
-module NatDedCndBel = BelPrinter(NatDedCnd)
-
-module SeqCalLatex = LatexPrinter(SeqCal);;
-module SeqCalBel = BelPrinter(SeqCal);;
+module NatDedLatex = LatexPrinter (NatDed)
+module NatDedBel = BelPrinter (NatDed)
+module NatDedCndBel = BelPrinter (NatDedCnd)
+module SeqCalLatex = LatexPrinter (SeqCal)
+module SeqCalBel = BelPrinter (SeqCal)
