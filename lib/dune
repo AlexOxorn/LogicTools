@@ -3,4 +3,4 @@
 (library
  (name logic_tools)
  (public_name logic_tools)
- (libraries str))
+ (libraries str unix))

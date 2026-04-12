@@ -5,6 +5,7 @@ let rec type_eq_b (l : ty) (r : ty) =
   | UnitType, UnitType -> true
   | NoType, NoType -> true
   | NamedType l, NamedType r -> l = r
+  | BottomType, BottomType -> true
   | Sum (ll, lr), Sum (rl, rr)
   | Prod (ll, lr), Prod (rl, rr)
   | Func (ll, lr), Func (rl, rr) ->
@@ -13,13 +14,15 @@ let rec type_eq_b (l : ty) (r : ty) =
 
 and expr_eq_b (l : expr) (r : expr) =
   match (l, r) with
-  | Top, Top | Bottom, Bottom
+  | Top, Top
+  | Bottom, Bottom
   | LinOne, LinOne
   | LinZero, LinZero
   | Abort, Abort
   | Control, Control
   | CallCC, CallCC
-  | TypeUnit, TypeUnit -> true
+  | TypeUnit, TypeUnit ->
+      true
   | Name a, Name b -> a = b
   | And (ll, lr), And (rl, rr)
   | NAnd (ll, lr), NAnd (rl, rr)
@@ -31,11 +34,13 @@ and expr_eq_b (l : expr) (r : expr) =
   | LinImpl (ll, lr), LinImpl (rl, rr)
   | LinOrSum (ll, lr), LinOrSum (rl, rr)
   | LinOrProd (ll, lr), LinOrProd (rl, rr)
-  | EvaluationContext ((ll, _), (lr, _)), EvaluationContext ((rl, _), (rr, _))
+  | EvaluationContext (ll, lr), EvaluationContext (rl, rr)
   | Impl (ll, lr), Impl (rl, rr) ->
       expr_eq_b ll rl && expr_eq_b lr rr
   | LetPair (lln, lrn, lp, lb), LetPair (rln, rrn, rp, rb) ->
       lln = rln && lrn = rrn && expr_eq_b lp rp && expr_eq_b lb rb
+  | Let (lln, lp, lb), Let (rln, rp, rb) ->
+      lln = rln && expr_eq_b lp rp && expr_eq_b lb rb
   | Case (m, (lln, llb), (lrn, lrb)), Case (n, (rln, rlb), (rrn, rrb)) ->
       expr_eq_b m n && lln = rln && lrn = rrn && expr_eq_b llb rlb
       && expr_eq_b lrb rrb
@@ -44,6 +49,7 @@ and expr_eq_b (l : expr) (r : expr) =
   | First l, First r -> expr_eq_b l r
   | Second l, Second r -> expr_eq_b l r
   | Lambda (lx, lb), Lambda (rx, rb) -> lx = rx && expr_eq_b lb rb
+  | Mu (lx, lb), Mu (rx, rb) -> lx = rx && expr_eq_b lb rb
   | InjectRight (tl, el), InjectRight (tr, er)
   | InjectLeft (tl, el), InjectLeft (tr, er) ->
       type_eq_b tl tr && expr_eq_b el er
@@ -55,6 +61,7 @@ and expr_eq_b (l : expr) (r : expr) =
       n1 = n2 && type_eq_b ty1 ty2 && expr_eq_b e1 e2
   | Exists (n1, ty1, e1), Exists (n2, ty2, e2) ->
       n1 = n2 && type_eq_b ty1 ty2 && expr_eq_b e1 e2
+  | Command (c1, b1), Command (c2, b2) -> c1 = c2 && expr_eq_b b1 b2
   | Top, _
   | Bottom, _
   | LinOne, _

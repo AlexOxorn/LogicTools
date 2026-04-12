@@ -34,6 +34,8 @@ module type ContextFunctions = sig
   val toMap : t -> stmt StmtMap.t
   val reifyContext : t -> t
   val flatten : t -> assumption list
+  val getType : string -> t -> judgement
+  val isEmpty : t -> bool
 end
 
 module Context : ContextFunctions = struct
@@ -224,6 +226,24 @@ module Context : ContextFunctions = struct
     | ConCat (l, r) -> flatten l @ flatten r
     | ConNameWithDef (_, c) -> flatten c
     | _ -> failwith "Contexts need to be Fully Defined"
+
+  let getType var ctx =
+    match lookupAss var ctx with
+    | Some (VariableAssumption (_, TypeOf t)) -> TypeOf t
+    | Some (VariableAssumption (_, ContextType t)) -> ContextType t
+    | Some (VariableAssumption _) ->
+        failwith "Variable in context doesn't have a type"
+    | Some _ -> failwith "Variable in context is a statement"
+    | None -> failwith "Variable not in"
+
+  let rec isEmpty ctx =
+    match ctx with
+    | NoContext -> true
+    | Empty -> true
+    | ConName _ -> false
+    | ConCat (l, r) -> isEmpty l && isEmpty r
+    | ConApp _ -> false
+    | ConNameWithDef (_, c) -> isEmpty c
 end
 
 module ModalContext = struct
@@ -339,4 +359,46 @@ module TemporalContext = struct
           (Context.latex assPrinter l)
           (Context.latex assPrinter r)
     | _ -> failwith "Temporal Context Must Have Top-level Context Concatenate"
+end
+
+module LambdaMuContext = struct
+  include Context
+
+  type flags = Variables | Continuations
+
+  let empty = ConCat (Empty, Empty)
+  let add ?alt:_ _ _ _ = failwith "Types Only"
+
+  let add_var ?(alt = Variables) n s c =
+    match (alt, c) with
+    | Variables, ConCat (l, r) -> ConCat (Context.add_var n s l, r)
+    | Continuations, ConCat (l, r) -> ConCat (l, Context.add_var n s r)
+    | _ -> failwith "LambdaMu Context Must Have Top-level Context Concatenate"
+
+  let nameLeft n c =
+    match c with
+    | ConCat (l, r) -> ConCat (Context.name n l, r)
+    | _ -> failwith "Modal Context Must Have Top-level Context Concatenate"
+
+  let nameRight n c =
+    match c with
+    | ConCat (l, r) -> ConCat (l, Context.name n r)
+    | _ -> failwith "Modal Context Must Have Top-level Context Concatenate"
+
+  let name n ?(alt = Variables) =
+    match alt with Continuations -> nameRight n | Variables -> nameLeft n
+
+  let cat _ _ = failwith "Can't Concatenate Combined Modal Context"
+
+  let collapse = function
+    | ConCat (l, r) -> ConCat (Context.collapse l, Context.collapse r)
+    | c -> Context.collapse c
+
+  let latex assPrinter ctx =
+    match ctx with
+    | ConCat (l, r) ->
+        Format.asprintf "%s;\\ %s"
+          (Context.latex assPrinter l)
+          (Context.latex assPrinter r)
+    | _ -> failwith "Modal Context Must Have Top-level Context Concatenate"
 end

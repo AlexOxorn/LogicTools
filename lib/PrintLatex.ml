@@ -6,7 +6,7 @@ let wrap_paran test str =
   match test with true -> Format.asprintf "(%s)" str | false -> str
 
 let precedence = function
-  | Name _ | Top | Bottom | TypeUnit | Control | Abort | CallCC | LinOne
+  | Name _ | Top | Bottom | TypeUnit | Control | Abort | CallCC | LinOne | Hole
   | LinZero ->
       0
   | Pair _ -> 1
@@ -16,15 +16,17 @@ let precedence = function
   | And _ | NAnd _ | Or _ | Nor _ | LinAndProd _ | LinAndSum _ | LinOrProd _
   | LinOrSum _ ->
       4
-  | ForAll _ | Exists _ | Lambda _ | Case _ -> 5
+  | ForAll _ | Exists _ | Lambda _ | Case _ | Mu _ | Command _ -> 5
   | Impl _ | Let _ | LinImpl _ | LetPair _ -> 6
   | CtxExp _ -> 7
 (* | _ -> 8 *)
 
 let type_precedence = function
   | UnitType | BottomType | NoType | NamedType _ -> 0
-  | Prod _ | Sum _ -> 1
-  | Func _ -> 2
+  (* | NotType _ -> 1 *)
+  | Func (_, BottomType) -> 1
+  | Prod _ | Sum _ -> 2
+  | Func _ -> 3
 
 let expr_is_atomic (e : expr) = precedence e = 0
 
@@ -42,6 +44,7 @@ let rec expr_latex (e : expr) =
       match e with
       (* Nat Deduction *)
       | Name x -> x
+      | Hole -> "[]"
       | Top -> "\\top"
       | Bottom -> "\\bot"
       | And (l, r) ->
@@ -154,7 +157,13 @@ let rec expr_latex (e : expr) =
       | Control -> "\\mathcal{C}"
       | CallCC -> "\\mathcal{K}"
       | Abort -> "\\mathcal{A}"
-      | EvaluationContext ((l, _), (r, _)) ->
+      | Command (CVar l, r) ->
+          Format.asprintf "[%s]%s" l (inner (lt_prec e r) r)
+      | Command (CTop, r) ->
+          Format.asprintf "[\\mathcal{A}]%s" (inner (lt_prec e r) r)
+      | Mu (arg, body) ->
+          Format.asprintf "\\mu %s.%s" arg (inner (lt_prec e body) body)
+      | EvaluationContext (l, r) ->
           Format.asprintf "%s[%s]" (inner (lt_prec e l) l) (inner false r)
     in
     wrap_paran (wrap && not (expr_is_atomic e)) base
@@ -176,6 +185,8 @@ and type_latex ?(strict = true) (t : ty) =
           Format.asprintf "%s \\times %s"
             (inner (ty_le_prec t l) l)
             (inner (ty_le_prec t r) r)
+      | Func (l, BottomType) ->
+          Format.asprintf "\\lnot %s" (inner (ty_lt_prec t l) l)
       | Func (l, r) ->
           Format.asprintf "%s \\rightarrow %s"
             (inner (ty_le_prec t l) l)
@@ -193,6 +204,7 @@ and judgement_latex (j : judgement) =
   | Up -> "^{\\uparrow}"
   | Down -> "^{\\downarrow}"
   | Valid -> " \\text{ valid}"
+  | ContextType c -> ":(" ^ context_latex c ^ ")"
   | TypeOf NoType -> ""
   | TypeOf a -> ":" ^ type_latex a
 
@@ -204,15 +216,19 @@ and assumption_latex (ass : assumption) =
   | VariableAssumption (name, jd) -> stmt_latex { exp = Name name; judge = jd }
 
 and context_latex ctx =
-  match ctx with
-  | Empty -> "\\,\\cdot\\,"
-  | ConName a -> a
-  | ConApp (Empty, r) -> Format.asprintf "%s" (assumption_latex r)
-  | ConApp (l, r) ->
-      Format.asprintf "%s,%s" (context_latex l) (assumption_latex r)
-  | ConCat (l, r) -> Format.asprintf "%s;%s" (context_latex l) (context_latex r)
-  | ConNameWithDef (n, _) -> n
-  | NoContext -> ""
+  if ContextUtils.Context.isEmpty ctx then ""
+  else
+    let rec inner ctx =
+      match ctx with
+      | Empty -> "\\,\\cdot\\,"
+      | ConName a -> a
+      | ConApp (Empty, r) -> Format.asprintf "%s" (assumption_latex r)
+      | ConApp (l, r) -> Format.asprintf "%s,%s" (inner l) (assumption_latex r)
+      | ConCat (l, r) -> Format.asprintf "%s;%s" (inner l) (inner r)
+      | ConNameWithDef (n, _) -> n
+      | NoContext -> ""
+    in
+    inner ctx
 
 and context_stmt_latex_base connection ctx st =
   match ctx with
@@ -252,8 +268,10 @@ let inference_latex (i : inference) =
   | OrElim (l, r) -> Format.asprintf "\\lor E^{%s, %s}" l r
   | VariantElim -> "\\lor E"
   (* Implication *)
-  | ImplIntro a | LambdaIntro a -> "{\\supset} I^" ^ a
-  | ImplElim | ApplicationElimination -> "{\\supset} E"
+  | ImplIntro a -> "{\\supset} I^" ^ a
+  | LambdaIntro a -> "{\\lambda} I^" ^ a
+  | ImplElim -> "{\\supset} E"
+  | ApplicationElimination -> "{\\lambda} I E"
   | ImplLeft (_, s) -> "{\\supset} L^{" ^ s ^ "}"
   | ImplRight a -> "{\\supset} R^{" ^ a ^ "}"
   | LinImplIntro a -> "{\\multimap} I^{" ^ a ^ "}"
@@ -281,6 +299,9 @@ let inference_latex (i : inference) =
   (* Box *)
   | BoxIntro -> "{\\square} I"
   | BoxElim a -> "{\\square} E^{" ^ a ^ "}"
+  | BoxRight -> "{\\square} R"
+  | BoxLeft a -> "{\\square} L^{" ^ a ^ "}"
+  | BoxReflect -> "{\\text{reflect}}"
   | BangIntro -> "{!\\,} I"
   | BangElim a -> "{!\\,} E^{" ^ a ^ "}"
   | NextIntro -> "{\\bigcirc} I"
@@ -292,6 +313,8 @@ let inference_latex (i : inference) =
   | CElim -> "\\"
   | CCElim -> "\\"
   | AbortElim -> "\\"
+  | CommandIntro -> "[\\ ]I"
+  | MuIntroduction x -> Format.asprintf "\\mu I^{%s}" x
 
 let rec print_latex_deduction_name (d : deductionName) =
   match d with

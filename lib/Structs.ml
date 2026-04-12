@@ -1,3 +1,5 @@
+type commandVar = CVar of string | CTop
+
 type expr =
   (* Nat Deduction *)
   | Name of string
@@ -44,18 +46,29 @@ type expr =
   | Control
   | CallCC
   | Abort
-  | EvaluationContext of (expr * ty) * (expr * ty)
+  | Mu of string * expr
+  | Command of commandVar * expr
+  | EvaluationContext of expr * expr
 
 and ty =
   | NamedType of string
   | NoType
   | UnitType
   | BottomType
+  (* | NotType of (ty) *)
   | Sum of (ty * ty)
   | Prod of (ty * ty)
   | Func of (ty * ty)
 
-and judgement = NoJudge | Truth | TypeOf of ty | Up | Down | Valid
+and judgement =
+  | NoJudge
+  | Truth
+  | TypeOf of ty
+  | ContextType of context
+  | Up
+  | Down
+  | Valid
+
 and stmt = { exp : expr; judge : judgement }
 
 and assumption =
@@ -136,6 +149,9 @@ type inference =
   (* Box *)
   | BoxIntro
   | BoxElim of string
+  | BoxReflect
+  | BoxRight
+  | BoxLeft of string
   | BangIntro
   | BangElim of string
   | NextIntro
@@ -147,6 +163,8 @@ type inference =
   | CCElim
   | CElim
   | AbortElim
+  | MuIntroduction of string
+  | CommandIntro
 
 type deductionName =
   | Literal of string

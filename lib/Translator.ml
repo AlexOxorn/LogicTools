@@ -3,7 +3,6 @@ open Utils
 open ContextUtils
 open ExprUtils
 
-
 let rec trans (e : expr) : expr =
   match e with
   | Name x -> Name x
@@ -216,6 +215,66 @@ let rec seq_to_nat (p : proof) : proof =
   in
   seq_to_nat_with_map [] p
 
+let rec not_to_implies_ctx = function
+  | Empty -> Empty
+  | NoContext -> NoContext
+  | ConName x -> ConName x
+  | ConNameWithDef (x, y) -> ConNameWithDef (x, not_to_implies_ctx y)
+  | ConCat (l, r) -> ConCat (not_to_implies_ctx l, not_to_implies_ctx r)
+  | ConApp (l, StmtAssumption (x, { exp = e; judge = j })) ->
+      ConApp
+        ( not_to_implies_ctx l,
+          StmtAssumption (x, { exp = not_to_implies_exp e; judge = j }) )
+  | ConApp (l, x) -> ConApp (not_to_implies_ctx l, x)
+
+and not_to_implies_exp = function
+  | Not e -> Impl (not_to_implies_exp e, Bottom)
+  | And (l, r) -> And (not_to_implies_exp l, not_to_implies_exp r)
+  | Or (l, r) -> Or (not_to_implies_exp l, not_to_implies_exp r)
+  | Impl (l, r) -> Impl (not_to_implies_exp l, not_to_implies_exp r)
+  | Top -> Top
+  | Bottom -> Bottom
+  | Name x -> Name x
+  | e -> failwith ("Lazy: " ^ PrettyPrinter.pp_expr e)
+
+let rec not_to_implies_bot = function
+  | {
+      term = { exp = e; judge = j };
+      con = c;
+      inf = { contents = Inference (NotElim, pfs) };
+    } ->
+      {
+        term = { exp = not_to_implies_exp e; judge = j };
+        con = not_to_implies_ctx c;
+        inf = ref (Inference (ImplElim, List.map not_to_implies_bot pfs));
+      }
+  | {
+      term = { exp = e; judge = j };
+      con = c;
+      inf = { contents = Inference (NotIntro (_, y), pfs) };
+    } ->
+      {
+        term = { exp = not_to_implies_exp e; judge = j };
+        con = not_to_implies_ctx c;
+        inf = ref (Inference (ImplIntro y, List.map not_to_implies_bot pfs));
+      }
+  | {
+      term = { exp = e; judge = j };
+      con = c;
+      inf = { contents = Inference (x, pfs) };
+    } ->
+      {
+        term = { exp = not_to_implies_exp e; judge = j };
+        con = not_to_implies_ctx c;
+        inf = ref (Inference (x, List.map not_to_implies_bot pfs));
+      }
+  | { term = { exp = e; judge = j }; con = c; inf = x } ->
+      {
+        term = { exp = not_to_implies_exp e; judge = j };
+        con = not_to_implies_ctx c;
+        inf = x;
+      }
+
 let nat_to_curry ?(strict = true) (p : proof) : proof =
   let open CurryTranslatorTools in
   let default_type = if strict then None else Some (NamedType "?") in
@@ -225,6 +284,10 @@ let nat_to_curry ?(strict = true) (p : proof) : proof =
       StringSet.t * proof =
     let c = cleanse_context ?default:default_type [] c0 in
     match !i with
+    | Inference (TopIntro, []) ->
+        if e == Top then
+          (used, make_proof c (is_type TypeUnit UnitType) Axiom [])
+        else failwith "Non Top Axiom"
     | Inference (Assumption x, []) -> (used, assumption_or_proof [] c x)
     | Inference (AndIntro, [ pfL; pfR ]) ->
         let used2, trPL = nat_to_curry_with_used used pfL in
@@ -283,10 +346,15 @@ let nat_to_curry ?(strict = true) (p : proof) : proof =
         let used2, trP1 = nat_to_curry_with_used used pf1 in
         ( used2,
           make_proof c
-            CurryExpr.(abortTyped trP1.term.exp (expr_to_type e))
+            {
+              exp = Application (Abort, trP1.term.exp);
+              judge = TypeOf (expr_to_type e);
+            }
             AbortIntro [ trP1 ] )
     | Inference (Law "Peirce", []) ->
         (used, make_proof c (Utils.is_type CallCC (expr_to_type e)) CCIntro [])
+    | Inference (Law "DN", []) ->
+        (used, make_proof c (Utils.is_type Control (expr_to_type e)) CIntro [])
     | NoInference | Deduction _ ->
         let term, used2 = get_new_term_name used in
         ( used2,
@@ -300,7 +368,9 @@ let nat_to_curry ?(strict = true) (p : proof) : proof =
             inf = i;
           } )
     | _ ->
-        if strict then failwith "Invalid Nat Ded Inference"
+        if strict then
+          failwith
+            ("Invalid Nat Ded Inference" ^ PrettyPrinter.pp_expr p.term.exp)
         else
           let x, used1 = get_new_term_name used in
           let t = PrettyPrinter.pp_expr e in

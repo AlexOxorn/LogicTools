@@ -2,6 +2,7 @@ open Structs
 open Utils
 open ContextUtils
 open Evaluator
+open ExprUtils
 
 let complete_proof p i = p.inf := i
 let make_inference p r ps = p.inf := Inference (r, ps)
@@ -146,6 +147,14 @@ module NatDedSolver (Ctx : ContextFunctions) = struct
             p.inf := Inference (ByContra (targetname, new_var), to_return);
             to_return
         | _ -> failwith "Too Few Names")
+
+  let proof_by_double_neg (p : proof) =
+    let c = p.con in
+    let x = make_partial_t c NatDedExp.(!(!(p.term)) => p.term) in
+    let re = [ x; make_partial_t c NatDedExp.(!(!(p.term))) ] in
+    x.inf := Inference (Law "DN", []);
+    p.inf := Inference (ImplElim, re);
+    re
 end
 
 module ModalSolver (Ctx : ContextFunctions) = struct
@@ -210,7 +219,11 @@ module ModalSolver (Ctx : ContextFunctions) = struct
       | _ -> failwith "Variable is Found in Valid Context"
     in
     if not (Equality.expr_eq_b eTerm p.term.exp) then
-      failwith "Expression Doesn't Match"
+      failwith
+        ("Expression Doesn't Match: "
+        ^ PrettyPrinter.pp_expr eTerm
+        ^ " <> "
+        ^ PrettyPrinter.pp_expr p.term.exp)
     else
       let next_proof = make_partial_e c (CtxExp cubC) NoJudge in
       make_inference p (ValidAssumption var_name) [ next_proof ];
@@ -318,6 +331,69 @@ module SeqSolver (Ctx : ContextFunctions) = struct
     | _ -> failwith "Unsupported Seq Split Left"
 end
 
+module ModalSeqSolver (Ctx : ContextFunctions) = struct
+  include BaseSolver (Ctx)
+  module SeqSuper = SeqSolver (Ctx)
+  module ModalSuper = ModalSolver (Ctx)
+
+  let split_right ?(v = 1) ?ctxName ?(vars = []) (p : proof) =
+    match p with
+    | { con = ConCat (l, _); term = { exp = Box (c2, e, _); judge = j }; _ } ->
+        let newCtx = ConCat (l, Context.reifyContext c2) in
+        let to_return = [ make_partial_e newCtx e j ] in
+        p.inf := Inference (BoxRight, to_return);
+        to_return
+    | { con = c; term = { exp = CtxExp sub; _ }; _ } ->
+        let _extract_statement = function
+          | StmtAssumption (_, s) -> s
+          | _ -> failwith "Only Valid for Statement Assumptions"
+        in
+        let to_return =
+          Ctx.flatten sub
+          |> List.map _extract_statement
+          |> List.map (make_partial_t c)
+        in
+        p.inf := Inference (CtxProof, to_return);
+        to_return
+    | _ -> SeqSuper.split_right ~v ?ctxName ~vars p
+
+  let split_left ?(v = 1) (names : (string option * string list) list) variable
+      (p : proof) =
+    let stmt = Ctx.lookupStmt variable p.con in
+    match (names, p, stmt) with
+    | ( (ctxName, vars) :: _,
+        { con = c; term = { exp = e; judge = j }; _ },
+        Some { exp = Box (c2, b, NoJudge); _ } ) ->
+        let new_var, _ = find_valid_name vars c in
+        let new_ctx =
+          wrap_context ctxName
+            (ModalContext.add ~alt:ModalContext.ValidCTX new_var
+               (make_term (Box (c2, b, Valid)) j)
+               c)
+        in
+        let to_return = [ make_partial_e new_ctx e j ] in
+        p.inf := Inference (BoxLeft new_var, to_return);
+        to_return
+    | _ -> SeqSuper.split_left ~v names variable p
+
+  let assumption_elimination var_name new_var ?ctxName ({ con = c; _ } as p) =
+    let l, _ = ModalSuper._split_ctx c in
+    let cubC, eTerm =
+      match Ctx.lookupStmt var_name l with
+      | Some { exp = Box (c2, e, Valid); _ } -> (c2, e)
+      | _ -> failwith "Variable isn't Found in Valid Context"
+    in
+    let next_proof = make_partial_e c (CtxExp cubC) NoJudge in
+    let this_proof =
+      make_partial_t
+        (wrap_context ctxName
+           Ctx.(c |> add new_var (no_judge (Box (cubC, eTerm, NoJudge)))))
+        p.term
+    in
+    make_inference p BoxReflect [ next_proof; this_proof ];
+    [ next_proof; this_proof ]
+end
+
 module LinearSolver (Ctx : ContextFunctions) = struct
   include BaseSolver (Ctx)
 
@@ -396,4 +472,95 @@ end
 
 module CCCSolver (Ctx : ContextFunctions) = struct
   include BaseSolver (Ctx)
+end
+
+module CurrySolver (Ctx : ContextFunctions) = struct
+  include BaseSolver (Ctx)
+
+  let split ?(_version = 1) ?ctxName ?(_vars = []) ?typeInfo (p : proof) =
+    match p with
+    | { con = c; term = { exp = Pair (l, r); judge = j }; _ } ->
+        let to_return = [ make_partial_e c l j; make_partial_e c r j ] in
+        p.inf := Inference (PairConstructor, to_return);
+        to_return
+    | {
+     con = c;
+     term = { exp = Lambda (l, r); judge = TypeOf (Func (a, b)) };
+     _;
+    } ->
+        let new_var = l in
+        let new_ctx = wrap_context ctxName (Ctx.add_var new_var (TypeOf a) c) in
+        let to_return = [ make_partial_e new_ctx r (TypeOf b) ] in
+        p.inf := Inference (LambdaIntro new_var, to_return);
+        to_return
+    | { con = c; term = { exp = Application (l, r); judge = TypeOf b }; _ } ->
+        let a =
+          match typeInfo with
+          | Some a -> a
+          | None -> failwith "Need to provide argument type"
+        in
+        let to_return =
+          [
+            make_partial_e c l (TypeOf (Func (a, b)));
+            make_partial_e c r (TypeOf a);
+          ]
+        in
+        p.inf := Inference (ApplicationElimination, to_return);
+        to_return
+    | _ -> failwith "Bad Split"
+end
+
+module LambdaMuSolver (Ctx : ContextFunctions) = struct
+  include BaseSolver (Ctx)
+  module Super = CurrySolver (Ctx)
+
+  let abortString = "\\mathcal{A}"
+
+  let cc ?(x = "x") ?(y = "y") ?(a = "\\alpha") ?(b = "\\beta") () =
+    CurryExpr.(x /-> (a $-> a#!(Name x @- (y /-> (b $-> a#!(Name y))))))
+
+  let control ?(x = "x") ?(y = "y") ?(a = "\\alpha") ?(b = "\\beta") () =
+    CurryExpr.(x /-> (a $-> !%(Name x @- (y /-> (b $-> a#!(Name y))))))
+
+  let abort ?(x = "x") ?(a = "\\alpha") () =
+    CurryExpr.(x /-> (a $-> !%(Name x)))
+
+  let ctrlTerm ?(x = "x") ?(y = "y") ?(a = "\\alpha") ?(b = "\\beta") t =
+    { exp = control ~x ~y ~a ~b (); judge = TypeOf CurryExpr.(!(!t) => t) }
+
+  let ccTerm ?(x = "x") ?(y = "y") ?(a = "\\alpha") ?(b = "\\beta") t p =
+    { exp = cc ~x ~y ~a ~b (); judge = TypeOf CurryExpr.(t => p => t => t) }
+
+  let abortTerm ?(x = "x") ?(a = "\\alpha") t =
+    { exp = abort ~x ~a (); judge = TypeOf CurryExpr.(BottomType => t) }
+
+  let getContinuationType ?c x =
+    match (x, c) with
+    | CVar s, Some cc -> Ctx.getType s cc
+    | CTop, _ -> TypeOf BottomType
+    | _ -> failwith "Must Provide Context for non top continuation"
+
+  let split ?(_version = 1) ?ctxName ?(_vars = []) ?typeInfo (p : proof) =
+    match p with
+    | { con = c; term = { exp = Mu (l, r); judge = j }; _ } ->
+        let new_var = l in
+        let new_ctx_base =
+          LambdaMuContext.(add_var ~alt:Continuations new_var j c)
+        in
+        let new_ctx =
+          match ctxName with
+          | None -> new_ctx_base
+          | Some name -> LambdaMuContext.nameRight name new_ctx_base
+        in
+        let to_return = [ make_partial_e new_ctx r (TypeOf BottomType) ] in
+        p.inf := Inference (MuIntroduction new_var, to_return);
+        to_return
+    | { con = c; term = { exp = Command (x, r); _ }; _ } ->
+        let new_ctx = wrap_context ctxName c in
+        let to_return =
+          [ make_partial_e new_ctx r (getContinuationType ~c x) ]
+        in
+        p.inf := Inference (CommandIntro, to_return);
+        to_return
+    | _ -> Super.split ~_version ?ctxName ~_vars ?typeInfo p
 end

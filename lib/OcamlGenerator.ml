@@ -12,7 +12,7 @@ let repeat_tailrec s n =
 
 let indentStr = repeat_tailrec "    "
 
-let exprToOcaml ?(withHeader=false) e =
+let exprToOcaml ?(withHeader = false) e =
   let rec inner indent e =
     match e with
     | Name a -> a
@@ -41,8 +41,13 @@ let exprToOcaml ?(withHeader=false) e =
         ^ Format.asprintf "%s)" (indentStr indent)
     | Abort -> "raise "
     | Bottom -> "Not_found"
+    | Let (x, p, b) ->
+        Format.asprintf "(let %s = %s in\n%s%s)" x
+          (inner (indent + 1) p)
+          (indentStr indent)
+          (inner (indent + 1) b)
     | LetPair (x, y, p, b) ->
-        Format.asprintf "let (%s, %s) = %s in\n%s%s" x y
+        Format.asprintf "(let (%s, %s) = %s in\n%s%s)" x y
           (inner (indent + 1) p)
           (indentStr indent)
           (inner (indent + 1) b)
@@ -66,11 +71,52 @@ let wrapMinted s =
 |}
     s
 
-let wrapVerbatim s = Format.asprintf {|
-\begin{verbatim}
+let wrapVerbatim s = Format.asprintf {|\begin{verbatim}
 %s
-\end{verbatim}
-|} s
+\end{verbatim}|} s
 
-let exprToLatex e = e |> exprToOcaml |> wrapMinted
-let exprToVerbatim e = e |> exprToOcaml |> wrapVerbatim
+let runCommand ?default inString cmd args =
+  let args = Array.of_list args in
+  let out, input = Unix.open_process_args cmd args in
+  Out_channel.output_string input inString;
+  Out_channel.flush input;
+  Out_channel.close input;
+  (* Unix.sleep(1); *)
+  (* Out_channel.close input; *)
+  let result = In_channel.input_all out in
+  let status = Unix.close_process (out, input) in
+  match (default, status) with
+  | _, WEXITED 0 -> result
+  | Some f, _ -> f
+  | _ -> failwith "No Fallback Detected"
+
+let formatOcaml s =
+  runCommand ~default:s s "ocamlformat"
+    [ "--enable-outside-detected-project"; "--impl"; "-" ]
+
+let getTypeInfoJson s =
+  Printf.eprintf "single type-expression --filename test.ml -position 1 -expression \"%s\"\n" s;
+  runCommand ~default:"()" ""
+    "/home/alexoxorn/School/Theory1/_opam/bin/ocamlmerlin-server"
+    [
+      "single type-expression --filename test.ml -position 1 -expression \"" ^ s ^ "\"";
+    ]
+
+let getOcamlInfo s =
+  let s = runCommand (s ^ ";;") "ocaml" ["-noprompt"] in
+  (String.split_on_char '\n' s)
+    |> List.rev
+    |> List.find (fun x -> String.length x > 0)
+
+let clearEmptyLines s =
+  String.split_on_char '\n' s
+  |> List.filter (fun x -> String.length x > 0)
+  |> String.concat "\n"
+
+let extractJsonValue s = runCommand ~default:"()" s "jq" [ "-r"; ".value" ]
+
+let ocamlTypeInference e =  e |> exprToOcaml |> getOcamlInfo |> clearEmptyLines |> wrapVerbatim
+
+let exprToFormattedOcaml e = e |> exprToOcaml |> formatOcaml  |> clearEmptyLines
+let exprToLatex e = e |> exprToFormattedOcaml |> wrapMinted
+let exprToVerbatim e = e |> exprToFormattedOcaml |> wrapVerbatim

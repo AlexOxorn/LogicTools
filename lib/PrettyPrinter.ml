@@ -82,13 +82,18 @@ let rec pp_expr (e : expr) =
   | First e -> Format.asprintf "fst %s" (pp_expr e)
   | Second e -> Format.asprintf "snd %s" (pp_expr e)
   | Application (l, r) -> Format.asprintf "%s(%s)" (pp_expr l) (pp_expr r)
-  | Lambda (x, r) -> Format.asprintf "\\%s.%s" x (pp_expr r)
+  | Lambda (x, r) -> Format.asprintf "\\lam %s.%s" x (pp_expr r)
+  | Mu (x, r) -> Format.asprintf "\\mu %s.%s" x (pp_expr r)
+  | Command (CVar x, b) -> Format.asprintf "[%s](%s)" x (pp_expr b)
+  | Command (CTop, b) -> Format.asprintf "[\\bot](%s)" (pp_expr b)
   | InjectLeft (_, r) -> Format.asprintf "injL %s" (pp_expr r)
-  | InjectRight (_, r) -> Format.asprintf "injL %s" (pp_expr r)
+  | InjectRight (_, r) -> Format.asprintf "injR %s" (pp_expr r)
   | Box (c, e, j) ->
       Format.asprintf "[%s %s %s]" (pp_con c) (pp_expr e) (pp_judgement j)
   | LetPair (x, y, p, m) ->
       Format.asprintf "let (%s, %s) = (%s) in (%s)" x y (pp_expr p) (pp_expr m)
+  | Let (x, p, m) ->
+      Format.asprintf "let %s = (%s) in (%s)" x (pp_expr p) (pp_expr m)
   | Case (x, (ln, lb), (rn, rb)) ->
       Format.asprintf "case (%s) { L(%s) -> %s | R(%s) -> %s}" (pp_expr x) ln
         (pp_expr lb) rn (pp_expr rb)
@@ -100,6 +105,7 @@ and pp_type (t : ty) =
   | NamedType x -> Format.asprintf "Name(%s)" x
   | UnitType -> "()"
   | BottomType -> "BottomType"
+  (* | NotType l -> Format.asprintf "(!%s)" (pp_type l) *)
   | Sum (l, r) -> Format.asprintf "(%s + %s)" (pp_type l) (pp_type r)
   | Prod (l, r) -> Format.asprintf "(%s * %s)" (pp_type l) (pp_type r)
   | Func (l, r) -> Format.asprintf "(%s -> %s)" (pp_type l) (pp_type r)
@@ -111,6 +117,7 @@ and pp_judgement (j : judgement) =
   | Up -> "Up"
   | Down -> "Down"
   | Valid -> "Valid"
+  | ContextType c -> "(" ^ pp_con c ^ ")"
   | TypeOf t -> Format.asprintf "isType %s" (pp_type t)
 
 and pp_stmt (s : stmt) =

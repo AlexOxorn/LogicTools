@@ -223,8 +223,8 @@ let check_flat_correctness (p : proof) =
       let subcontext =
         ConApp
           ( ConApp (c, VariableAssumption (var, TypeOf ty)),
-            StmtAssumption
-              (sub, is_true (Evaluator.substitute n1 (Name var) ex)) )
+            StmtAssumption (sub, is_true (Evaluator.substitute n1 (Name var) ex))
+          )
       in
       expr_eq res res2
       &&@
