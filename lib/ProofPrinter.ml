@@ -48,37 +48,63 @@ let as_latex prnt proof =
 module type ProofType = sig
   val ctx_separator : string
   val bel_mapping : Structs.inference -> string
+  val bel_e_mapping : Structs.expr -> string
+  val bel_t_mapping : Structs.ty -> string
 end
 
 module NatDed : ProofType = struct
   let ctx_separator = " \\vdash "
   let bel_mapping = sym_map_basic
+  let bel_e_mapping _ : string = failwith "Not Implemented"
+  let bel_t_mapping _ : string = failwith "Not Implemented"
 end
 
 module NatDedCnd : ProofType = struct
   let ctx_separator = " \\vdash "
   let bel_mapping = cnd_mapping
+  let bel_e_mapping _ : string = failwith "Not Implemented"
+  let bel_t_mapping _ : string = failwith "Not Implemented"
 end
 
 module SeqCal : ProofType = struct
   let ctx_separator = " \\implies "
   let bel_mapping = sym_map_seq
+  let bel_e_mapping _ : string = failwith "Not Implemented"
+  let bel_t_mapping _ : string = failwith "Not Implemented"
+end
+
+module CurryCal : ProofType = struct
+  let ctx_separator = " \\vdash "
+  let bel_mapping = lam_mu_mapping
+  let bel_e_mapping = lam_mu_term_mapping
+  let bel_t_mapping = lam_mu_type_mapping
 end
 
 module BelPrinter (Type : ProofType) = struct
   let symbol_mapping = Type.bel_mapping
   let str = proof_bel_base symbol_mapping
-  let cat sep prfs = String.concat sep (List.map str prfs)
-  let tab = cat "\t"
-  let lf = cat "\n"
+
+  let stmt (p : Structs.proof) =
+    stmtToBel p.con Type.bel_e_mapping ~typeMap:Type.bel_t_mapping p.term
+
+  let full ss n p = Format.asprintf "rec %s: %s\n\t= %s\n;" n (stmt p) (ss p)
+  let cat sep ss prfs = String.concat sep (List.map ss prfs)
+  let tab ss = cat "\t" ss
+  let lf ss = cat "\n" ss
   let space n = cat (String.make n ' ')
-  let space4 = space 4
-  let space8 = space 8
+  let space4 ss = space 4 ss
+  let space8 ss = space 8 ss
 
   let as_latex strF prf =
     Format.asprintf "\\begin{verbatim}\n%s\n\\end{verbatim}" (strF prf)
 
   let print strF prf = print_endline (strF prf)
+end
+
+module CurryBel = struct
+  include BelPrinter (CurryCal)
+
+  let typeOf = curry_bel_proof_base CurryCal.bel_mapping
 end
 
 module LatexPrinter (Type : ProofType) = struct
@@ -106,6 +132,36 @@ module LatexPrinter (Type : ProofType) = struct
 \setmonofont{DejaVu Sans Mono}[Scale=MatchLowercase] 
 
 \geometry{paper=letterpaper,left=0.5in,right=0.5in,top=.5in,head=.15in,bottom=0.5in} 
+\setlength{\headheight}{5pt}
+\def\iamp {\rotatebox[origin=c]{180}{\&}}
+
+\begin{document}
+  %s
+\end{document}
+|}
+
+  let oversized_doc =
+    Format.asprintf
+      {|
+\documentclass[fleqn]{article}
+\usepackage{graphicx} %% Required for inserting images
+\usepackage{proof}
+\usepackage{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{xcolor}
+\usepackage{minted}
+\usepackage{changepage}
+\usepackage{pdflscape}
+\usepackage{cmll}
+\usepackage{arydshln}
+\usepackage[bb=boondox]{mathalfa}
+\usepackage{fontspec}
+\usepackage{fancyvrb} %% Provides enhanced verbatim environments
+%% Set a font that supports a wide range of Unicode characters, e.g., DejaVu Sans Mono
+\setmonofont{DejaVu Sans Mono}[Scale=MatchLowercase] 
+
+\geometry{paperwidth=100cm, paperheight=100cm,left=0.5in,right=0.5in,top=.5in,head=.15in,bottom=0.5in} 
 \setlength{\headheight}{5pt}
 \def\iamp {\rotatebox[origin=c]{180}{\&}}
 
@@ -171,5 +227,7 @@ end
 module NatDedLatex = LatexPrinter (NatDed)
 module NatDedBel = BelPrinter (NatDed)
 module NatDedCndBel = BelPrinter (NatDedCnd)
+
+(* module CurryBel = BelPrinter (CurryCal) *)
 module SeqCalLatex = LatexPrinter (SeqCal)
 module SeqCalBel = BelPrinter (SeqCal)

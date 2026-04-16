@@ -246,6 +246,17 @@ module Context : ContextFunctions = struct
     | ConNameWithDef (_, c) -> isEmpty c
 end
 
+module CurryContext = struct
+  include Context
+
+  let matchVarName name = function
+    | StmtAssumption (_, { exp = Name x; _ }) -> x = name
+    | _ -> false
+
+  let findStmtByVarName x = findStmt (matchVarName x)
+  let findAssByVarName x = findAss (matchVarName x)
+end
+
 module ModalContext = struct
   include Context
 
@@ -362,7 +373,7 @@ module TemporalContext = struct
 end
 
 module LambdaMuContext = struct
-  include Context
+  include CurryContext
 
   type flags = Variables | Continuations
 

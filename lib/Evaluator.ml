@@ -44,10 +44,9 @@ let rec substitute oldname new_expr expr =
   | CallCC -> CallCC
   | TypeUnit -> TypeUnit
   | Let (x, e1, e2) ->
-    if x = oldname then
-      Let(x, substitute oldname new_expr e1, e2)
-    else
-      Let(x, substitute oldname new_expr e1, substitute oldname new_expr e2)
+      if x = oldname then Let (x, substitute oldname new_expr e1, e2)
+      else
+        Let (x, substitute oldname new_expr e1, substitute oldname new_expr e2)
   | _ ->
       failwith
         (Format.asprintf "Subtitution failed for: %s"
@@ -117,11 +116,16 @@ let rec find_abort exp =
       let x = find_abort l in
       if Option.is_some x then x else find_abort r
   | Application (l, _) -> find_abort l
-  | First x | Second x | InjectLeft (_, x) | InjectRight (_, x) | Case (x, _, _) | Let(_, x, _)
-    -> find_abort x
+  | First x
+  | Second x
+  | InjectLeft (_, x)
+  | InjectRight (_, x)
+  | Case (x, _, _)
+  | Let (_, x, _) ->
+      find_abort x
   | _ -> None
 
-let rec reduce ?(multi = false) ?(nested=true) (e : expr) =
+let rec reduce ?(multi = false) ?(nested = true) (e : expr) =
   let rr = reduce ~multi ~nested in
   let isV = is_value ~multi ~nested in
   match e with
@@ -142,14 +146,12 @@ let rec reduce ?(multi = false) ?(nested=true) (e : expr) =
   | InjectRight (l, r) -> InjectRight (l, rr r)
   | First (Pair (l, _)) -> l
   | Second (Pair (_, r)) -> r
-  | Lambda (x, b) -> 
-    if nested then Lambda (x, rr b) else Lambda (x, b)
+  | Lambda (x, b) -> if nested then Lambda (x, rr b) else Lambda (x, b)
   | First e -> First (rr e)
   | Second e -> Second (rr e)
   | Let (x, e, body) ->
-    let isV, _ = isV e in
-    if nested || isV then body |> substitute x e
-    else Let (x, rr e, body)
+      let isV, _ = isV e in
+      if nested || isV then body |> substitute x e else Let (x, rr e, body)
   | LetPair (x, y, Pair (l, r), body) ->
       body |> substitute x l |> substitute y r
   | LetPair (x, y, p, body) ->
@@ -160,8 +162,7 @@ let rec reduce ?(multi = false) ?(nested=true) (e : expr) =
   | Application (Mu (arg, body), r) -> substituteCommand arg r body
   | Application (l, r) ->
       let p, l2 = isV l in
-      if not (multi || p) then Application (l2, r)
-      else Application (l2, rr r)
+      if not (multi || p) then Application (l2, r) else Application (l2, rr r)
   | Case (InjectLeft (_, l), (arg, body), _) -> substitute arg l body
   | Case (InjectRight (_, r), _, (arg, body)) -> substitute arg r body
   | Case (c, ((argL, l) as ll), ((argR, r) as rightCase)) ->
@@ -194,7 +195,7 @@ let rec reduce ?(multi = false) ?(nested=true) (e : expr) =
   | EvaluationContext (a, e) -> EvaluationContext (a, rr e) *)
   | x -> x
 
-and is_value ?(multi = false) ?(nested=true) e =
+and is_value ?(multi = false) ?(nested = true) e =
   let r = reduce ~multi ~nested e in
   (Equality.expr_eq_b e r, r)
 
@@ -387,8 +388,8 @@ let rec findControl cmd new_var = function
       let c, e2 = findControl cmd new_var e in
       (c, Case (e2, l, r))
   | Let (x, e, b) ->
-   let c, r2 = findControl cmd new_var e in
-        (c, Let (x, r2, b))
+      let c, r2 = findControl cmd new_var e in
+      (c, Let (x, r2, b))
   | e -> failwith ("Missed: " ^ PrettyPrinter.pp_expr e)
 
 let rec expandControl ?(withAbort = true) exp =
@@ -414,12 +415,9 @@ let rec expandControl ?(withAbort = true) exp =
       | Second e -> Second (expandControl ~withAbort e)
       | InjectLeft (t, e) -> InjectLeft (t, expandControl ~withAbort e)
       | InjectRight (t, e) -> InjectRight (t, expandControl ~withAbort e)
-      | Let(x, e, b) -> Let(x, expandControl ~withAbort e, b)
+      | Let (x, e, b) -> Let (x, expandControl ~withAbort e, b)
       | Case (e, (lx, le), (rx, re)) ->
-          Case
-            ( expandControl ~withAbort e,
-              (lx, le),
-              (rx, re) )
+          Case (expandControl ~withAbort e, (lx, le), (rx, re))
       | e -> failwith ("Missed: " ^ PrettyPrinter.pp_expr e))
 
 let rec expandCC ?(withAbort = true) exp =
@@ -445,7 +443,7 @@ let rec expandCC ?(withAbort = true) exp =
       | Second e -> Second (expandCC ~withAbort e)
       | InjectLeft (t, e) -> InjectLeft (t, expandCC ~withAbort e)
       | InjectRight (t, e) -> InjectRight (t, expandCC ~withAbort e)
-      | Let(x, e, b) -> Let(x, expandControl ~withAbort e, b)
+      | Let (x, e, b) -> Let (x, expandControl ~withAbort e, b)
       | Case (e, (lx, le), (rx, re)) ->
           Case
             ( expandCC ~withAbort e,

@@ -95,18 +95,21 @@ let formatOcaml s =
     [ "--enable-outside-detected-project"; "--impl"; "-" ]
 
 let getTypeInfoJson s =
-  Printf.eprintf "single type-expression --filename test.ml -position 1 -expression \"%s\"\n" s;
+  Printf.eprintf
+    "single type-expression --filename test.ml -position 1 -expression \"%s\"\n"
+    s;
   runCommand ~default:"()" ""
     "/home/alexoxorn/School/Theory1/_opam/bin/ocamlmerlin-server"
     [
-      "single type-expression --filename test.ml -position 1 -expression \"" ^ s ^ "\"";
+      "single type-expression --filename test.ml -position 1 -expression \"" ^ s
+      ^ "\"";
     ]
 
 let getOcamlInfo s =
-  let s = runCommand (s ^ ";;") "ocaml" ["-noprompt"] in
-  (String.split_on_char '\n' s)
-    |> List.rev
-    |> List.find (fun x -> String.length x > 0)
+  let s = runCommand (s ^ ";;") "ocaml" [ "-noprompt" ] in
+  String.split_on_char '\n' s
+  |> List.rev
+  |> List.find (fun x -> String.length x > 0)
 
 let clearEmptyLines s =
   String.split_on_char '\n' s
@@ -115,8 +118,9 @@ let clearEmptyLines s =
 
 let extractJsonValue s = runCommand ~default:"()" s "jq" [ "-r"; ".value" ]
 
-let ocamlTypeInference e =  e |> exprToOcaml |> getOcamlInfo |> clearEmptyLines |> wrapVerbatim
+let ocamlTypeInference e =
+  e |> exprToOcaml |> getOcamlInfo |> clearEmptyLines |> wrapVerbatim
 
-let exprToFormattedOcaml e = e |> exprToOcaml |> formatOcaml  |> clearEmptyLines
+let exprToFormattedOcaml e = e |> exprToOcaml |> formatOcaml |> clearEmptyLines
 let exprToLatex e = e |> exprToFormattedOcaml |> wrapMinted
 let exprToVerbatim e = e |> exprToFormattedOcaml |> wrapVerbatim

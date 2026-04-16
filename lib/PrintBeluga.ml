@@ -53,6 +53,39 @@ let sym_map_basic d =
   | Assumption x -> x
   | _ -> failwith "Invalid symbolic basic mapping"
 
+let lam_mu_term_mapping d =
+  match d with
+  | Pair _ -> "pair"
+  | First _ -> "fst"
+  | Second _ -> "snd"
+  | Application _ -> "app"
+  | Lambda _ -> "lam"
+  | Mu _ -> "mu"
+  | Command _ -> "throw"
+  | _ -> failwith "Invalid symbolic mu-term mapping"
+
+let lam_mu_type_mapping d =
+  match d with
+  | UnitType -> "tTop"
+  | BottomType -> "tBot"
+  | Prod _ -> "prod"
+  | Func _ -> "func"
+  | _ -> failwith "Invalid symbolic mu-type mapping"
+
+let lam_mu_mapping d =
+  match d with
+  | PairConstructor -> "pair"
+  | PairElimLeft -> "fst"
+  | PairElimRight -> "fst"
+  | ApplicationElimination -> "app"
+  | LambdaIntro _ -> "lam"
+  | MuIntroduction _ -> "mu"
+  | CommandIntro -> "throw"
+  | Assumption x -> x
+  | _ ->
+      Printf.eprintf "Invalid symbolic mu mapping\n";
+      "__"
+
 let sym_map_seq d =
   match d with
   | AndLeft1 _ -> "∧L1"
@@ -110,12 +143,54 @@ let rec print_bel_deduction_name (d : deductionName) =
       Format.asprintf "%s[..,%s]" (print_bel_deduction_name x) substitutions
 
 let print_bel_ctx (ctx : context) =
-  match ctx with
-  | ConName "\\Gamma" | ConNameWithDef ("\\Gamma", _) -> " Γ"
-  | ConName "\\Gamma'" | ConNameWithDef ("\\Gamma'", _) -> " Γ'"
-  | ConName x | ConNameWithDef (x, _) -> x
-  | Empty -> ""
-  | _ -> failwith "Complex Context not implemented yet for beluga"
+  if ContextUtils.Context.isEmpty ctx then ""
+  else
+    match ctx with
+    | ConName "\\Gamma" | ConNameWithDef ("\\Gamma", _) -> " Γ"
+    | ConName "\\Gamma'" | ConNameWithDef ("\\Gamma'", _) -> " Γ'"
+    | ConName x | ConNameWithDef (x, _) -> x
+    | Empty -> ""
+    | _ -> failwith "Complex Context not implemented yet for beluga"
+
+let map_var_string x =
+  let textRe = Str.regexp "\\\\textt?t?\\{(.*)}" in
+  match x with
+  | "\\alpha" -> "α"
+  | "\\beta" -> "β"
+  | "\\Gamma" -> "Γ"
+  | "\\Delta" -> "Δ"
+  | x -> Str.global_replace textRe "\\1" x
+
+let rec exprToBel expMap e =
+  let inner = exprToBel expMap in
+  match e with
+  | Name x -> map_var_string x
+  | Lambda (x, b) | Mu (x, b) ->
+      Format.asprintf "%s (\\%s.%s)" (expMap e) (map_var_string x) (inner b)
+  | Pair (l, r) | Application (l, r) ->
+      Format.asprintf "%s (%s) (%s)" (expMap e) (inner l) (inner r)
+  | First x | Second x -> Format.asprintf "%s (%s)" (expMap e) (inner x)
+  | Command (CVar x, b) ->
+      Format.asprintf "%s (%s) (%s)" (expMap e) (map_var_string x) (inner b)
+  | Command (CTop, b) -> Format.asprintf "%s cTop (%s)" (expMap e) (inner b)
+  | _ -> Format.asprintf "?"
+
+let rec typeToBel typeMap t =
+  let inner = typeToBel typeMap in
+  match t with
+  | NamedType x -> x
+  | Prod (l, r) | Func (l, r) ->
+      Format.asprintf "(%s %s %s)" (typeMap t) (inner l) (inner r)
+  | UnitType | BottomType -> typeMap t
+  | _ -> Format.asprintf "?"
+
+let stmtToBel c expMap ?typeMap st =
+  match st with
+  | { exp = _; judge = TypeOf t } ->
+      Format.asprintf "[%s ⊢ term (%s)]" (print_bel_ctx c)
+        (typeToBel (Option.get typeMap) t)
+  | { exp = e; _ } ->
+      Format.asprintf "[%s ⊢ %s]" (print_bel_ctx c) (exprToBel expMap e)
 
 let proof_bel_base mapping (prf : proof) =
   let rec inner (p : proof) simple =
@@ -153,10 +228,14 @@ let proof_bel_base mapping (prf : proof) =
               (Format.asprintf "%s %s (\\%s.%s) (\\%s.%s)" (mapping i)
                  (inner p1 true) (ass_name pl.con) (inner pl false)
                  (ass_name pr.con) (inner pr false))
-        | _, ImplIntro s, [ p1 ] | _, ImplRight s, [ p1 ] ->
+        | _, ImplIntro s, [ p1 ]
+        | _, ImplRight s, [ p1 ]
+        | _, LambdaIntro s, [ p1 ]
+        | _, MuIntroduction s, [ p1 ] ->
             wrap simple
-              (Format.asprintf "%s \\%s.%s" (mapping i) s (inner p1 false))
-        | _, ImplElim, [ p1; a ] ->
+              (Format.asprintf "%s \\%s.%s" (mapping i) (map_var_string s)
+                 (inner p1 false))
+        | _, ImplElim, [ p1; a ] | _, ApplicationElimination, [ p1; a ] ->
             wrap simple
               (Format.asprintf "%s %s %s" (mapping i) (inner p1 true)
                  (inner a true))
@@ -195,11 +274,68 @@ let proof_bel_base mapping (prf : proof) =
             wrap simple
               (Format.asprintf "(%s %s \\%s.%s) %s" (mapping i) t dest
                  (inner p false) src)
+        | { exp = Command (CVar x, _); _ }, CommandIntro, [ p1 ] ->
+            wrap simple
+              (Format.asprintf "%s %s %s" (mapping i) (map_var_string x)
+                 (inner p1 true))
+        | { exp = Command (CTop, _); _ }, CommandIntro, [ p1 ] ->
+            wrap simple
+              (Format.asprintf "%s cTop %s" (mapping i) (inner p1 true))
         | _ -> "(?)")
     | Deduction s -> Format.asprintf "%s" (print_bel_deduction_name s)
     | _ -> "(?)"
   in
   Format.asprintf "[%s ⊢ %s ]" (print_bel_ctx prf.con) (inner prf false)
+
+module StrMap = Map.Make (String)
+
+let curry_bel_proof_base mapping (prf : proof) =
+  let map_to_vals m =
+    m |> StrMap.to_seq |> Seq.map snd |> VariableUtils.StringSet.of_seq
+  in
+  let rec inner (p : proof) (typeMap : string StrMap.t) simple =
+    match !(p.inf) with
+    | Inference (i, pfs) -> (
+        match (p.term, i, pfs) with
+        | _, Assumption x, [] -> StrMap.find x typeMap
+        | _, LambdaIntro s, [ p1 ] ->
+            let newVar =
+              VariableUtils.(
+                find_unique_var ~varset:char_vars2 ~used:(map_to_vals typeMap)
+                  Top)
+            in
+            wrap simple
+              (Format.asprintf "%s \\%s.\\%s.%s" (mapping i) (map_var_string s)
+                 (map_var_string newVar)
+                 (inner p1 (StrMap.add s newVar typeMap) false))
+        | _, MuIntroduction s, [ p1 ] ->
+            let newVar =
+              VariableUtils.(
+                find_unique_var ~varset:char_vars2 ~used:(map_to_vals typeMap)
+                  Top)
+            in
+            wrap simple
+              (Format.asprintf "%s \\%s.\\%s.%s" (mapping i) (map_var_string s)
+                 (map_var_string newVar)
+                 (inner p1 (StrMap.add s newVar typeMap) false))
+        | { exp = Command (CVar x, _); _ }, CommandIntro, [ p1 ] ->
+            wrap simple
+              (Format.asprintf "%s %s %s" (mapping i)
+                 (StrMap.find x typeMap |> map_var_string)
+                 (inner p1 typeMap true))
+        | { exp = Command (CTop, _); _ }, CommandIntro, [ p1 ] ->
+            wrap simple
+              (Format.asprintf "%s cTop %s" (mapping i) (inner p1 typeMap true))
+        | _, ApplicationElimination, [ p1; p2 ] ->
+            wrap simple
+              (Format.asprintf "%s %s %s" (mapping i) (inner p1 typeMap true)
+                 (inner p2 typeMap true))
+        | _ -> "(?)")
+    | Deduction s -> Format.asprintf "%s" (print_bel_deduction_name s)
+    | _ -> "(?)"
+  in
+  Format.asprintf "[%s ⊢ %s ]" (print_bel_ctx prf.con)
+    (inner prf StrMap.empty false)
 
 let proof_bel = proof_bel_base sym_map_basic
 let proof_bel_alt = proof_bel_base sym_map_alt
