@@ -27,6 +27,20 @@ let greek_vars_small =
     "\\omega";
   ]
 
+let map_var_string x =
+  let textRe = Str.regexp "\\\\textt?t?\\{(.*)}" in
+  match x with
+  | "\\alpha" -> "α"
+  | "\\beta" -> "β"
+  | "\\Gamma" -> "Γ"
+  | "\\Delta" -> "Δ"
+  | x -> Str.global_replace textRe "\\1" x
+
+let indexedVars s = Seq.(ints 0 |> map (fun i -> s ^ string_of_int i))
+
+let remove_backslash x =
+  if x.[0] = '\\' then String.sub x 1 (String.length x - 1) else x
+
 let make_multi base =
   Seq.(
     append (List.to_seq base)

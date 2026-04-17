@@ -157,7 +157,24 @@ module CurryExpr = struct
         { exp = nbE; judge = _ } ) ->
         { exp = Case (mE, (a, naE), (b, nbE)); judge = TypeOf tp }
 
-  (* let abortTyped x y = { exp = Application (Abort, x); judge = TypeOf y } *)
+  let abortString = "\\mathcal{A}"
+
+  let cc ?(x = "x") ?(y = "y") ?(a = "\\alpha") ?(b = "\\beta") () =
+    x /-> (a $-> a#!(Name x @- (y /-> (b $-> a#!(Name y)))))
+
+  let control ?(x = "x") ?(y = "y") ?(a = "\\alpha") ?(b = "\\beta") () =
+    x /-> (a $-> !%(Name x @- (y /-> (b $-> a#!(Name y)))))
+
+  let abortExp ?(x = "x") ?(a = "\\alpha") () = x /-> (a $-> !%(Name x))
+
+  let ctrlTerm ?(x = "x") ?(y = "y") ?(a = "\\alpha") ?(b = "\\beta") t =
+    { exp = control ~x ~y ~a ~b (); judge = TypeOf (!(!t) => t) }
+
+  let ccTerm ?(x = "x") ?(y = "y") ?(a = "\\alpha") ?(b = "\\beta") t p =
+    { exp = cc ~x ~y ~a ~b (); judge = TypeOf (t => p => t => t) }
+
+  let abortTerm ?(x = "x") ?(a = "\\alpha") t =
+    { exp = abortExp ~x ~a (); judge = TypeOf (BottomType => t) }
 end
 
 module ModalExp = struct

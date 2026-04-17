@@ -514,26 +514,6 @@ module LambdaMuSolver (Ctx : ContextFunctions) = struct
   include BaseSolver (Ctx)
   module Super = CurrySolver (Ctx)
 
-  let abortString = "\\mathcal{A}"
-
-  let cc ?(x = "x") ?(y = "y") ?(a = "\\alpha") ?(b = "\\beta") () =
-    CurryExpr.(x /-> (a $-> a#!(Name x @- (y /-> (b $-> a#!(Name y))))))
-
-  let control ?(x = "x") ?(y = "y") ?(a = "\\alpha") ?(b = "\\beta") () =
-    CurryExpr.(x /-> (a $-> !%(Name x @- (y /-> (b $-> a#!(Name y))))))
-
-  let abort ?(x = "x") ?(a = "\\alpha") () =
-    CurryExpr.(x /-> (a $-> !%(Name x)))
-
-  let ctrlTerm ?(x = "x") ?(y = "y") ?(a = "\\alpha") ?(b = "\\beta") t =
-    { exp = control ~x ~y ~a ~b (); judge = TypeOf CurryExpr.(!(!t) => t) }
-
-  let ccTerm ?(x = "x") ?(y = "y") ?(a = "\\alpha") ?(b = "\\beta") t p =
-    { exp = cc ~x ~y ~a ~b (); judge = TypeOf CurryExpr.(t => p => t => t) }
-
-  let abortTerm ?(x = "x") ?(a = "\\alpha") t =
-    { exp = abort ~x ~a (); judge = TypeOf CurryExpr.(BottomType => t) }
-
   let getContinuationType ?c x =
     match (x, c) with
     | CVar s, Some cc -> Ctx.getType s cc

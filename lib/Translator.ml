@@ -386,3 +386,80 @@ let nat_to_curry ?(strict = true) (p : proof) : proof =
             } )
   in
   snd (nat_to_curry_with_used StringSet.empty p)
+
+let rec ctr_to_mu_ctx = function
+  | Empty -> Empty
+  | NoContext -> NoContext
+  | ConName x -> ConName x
+  | ConNameWithDef (x, y) -> ConNameWithDef (x, ctr_to_mu_ctx y)
+  | ConCat (l, r) -> ConCat (ctr_to_mu_ctx l, ctr_to_mu_ctx r)
+  | ConApp (l, StmtAssumption (x, { exp = e; judge = j })) ->
+      ConApp
+        ( ctr_to_mu_ctx l,
+          StmtAssumption (x, { exp = ctr_to_mu_exp e; judge = j }) )
+  | ConApp (l, x) -> ConApp (ctr_to_mu_ctx l, x)
+
+and ctr_to_mu_exp = function
+  | Pair (l, r) -> Pair (ctr_to_mu_exp l, ctr_to_mu_exp r)
+  | First l -> First (ctr_to_mu_exp l)
+  | Second l -> First (ctr_to_mu_exp l)
+  | InjectLeft (a, l) -> InjectLeft (a, ctr_to_mu_exp l)
+  | InjectRight (a, l) -> InjectRight (a, ctr_to_mu_exp l)
+  | Case (x, (ln, lb), (rn, rb)) ->
+      Case (ctr_to_mu_exp x, (ln, ctr_to_mu_exp lb), (rn, ctr_to_mu_exp rb))
+  | Lambda (l, r) -> Lambda (l, ctr_to_mu_exp r)
+  | Mu (l, r) -> Mu (l, ctr_to_mu_exp r)
+  | TypeUnit -> TypeUnit
+  | Application (l, r) -> Application (ctr_to_mu_exp l, ctr_to_mu_exp r)
+  | Control -> CurryExpr.control ()
+  | Abort -> CurryExpr.abortExp ()
+  | CallCC -> CurryExpr.cc ()
+  | Name x -> Name x
+  | Command (x, b) -> Command (x, ctr_to_mu_exp b)
+  | e -> failwith ("Lazy: " ^ PrettyPrinter.pp_expr e)
+
+let rec ctr_to_mu = function
+  | {
+      term = { exp = e; judge = j };
+      con = c;
+      inf = { contents = Inference (x, pfs) };
+    } ->
+      {
+        term = { exp = ctr_to_mu_exp e; judge = j };
+        con = ctr_to_mu_ctx c;
+        inf = ref (Inference (x, List.map ctr_to_mu pfs));
+      }
+  | { term = { exp = e; judge = j }; con = c; inf = x } ->
+      {
+        term = { exp = ctr_to_mu_exp e; judge = j };
+        con = ctr_to_mu_ctx c;
+        inf = x;
+      }
+
+module StringSet = Set.Make (String)
+
+let rec muCPS ?(used = StringSet.empty) exp =
+  let varset = VariableUtils.indexedVars "k" in
+  match exp with
+  | Name x ->
+      let k = VariableUtils.find_unique_var ~varset ~used exp in
+      CurryExpr.(k /-> (Name x @- Name k))
+  | Lambda (x, b) ->
+      let k = VariableUtils.find_unique_var ~varset ~used exp in
+      CurryExpr.(k /-> (Name k @- (x /-> muCPS ~used:(StringSet.add k used) b)))
+  | Application (l, r) ->
+      let k = VariableUtils.find_unique_var ~varset ~used exp in
+      let m =
+        VariableUtils.find_unique_var ~varset ~used:(StringSet.add k used) exp
+      in
+      let new_used = StringSet.(used |> add k |> add m) in
+      CurryExpr.(
+        k
+        /-> (muCPS ~used:new_used l
+            @- (m /-> ((Name m @- muCPS ~used:new_used r) @- Name k))))
+  | Mu (a, b) -> CurryExpr.(a /-> muCPS ~used b)
+  | Command (CVar x, m) ->
+      let k = VariableUtils.find_unique_var ~varset ~used exp in
+      CurryExpr.(
+        k /-> ((muCPS ~used:(StringSet.add k used) m @- Name x) @- Name k))
+  | _ -> failwith "Unimplemented"

@@ -66,21 +66,26 @@ let lam_mu_term_mapping d =
 
 let lam_mu_type_mapping d =
   match d with
-  | UnitType -> "tTop"
-  | BottomType -> "tBot"
-  | Prod _ -> "prod"
-  | Func _ -> "func"
+  | UnitType -> "⊤"
+  | BottomType -> "⊥"
+  | Prod _ -> "∧"
+  | Func _ -> "⊃"
+  | Sum _ -> "∨"
   | _ -> failwith "Invalid symbolic mu-type mapping"
 
 let lam_mu_mapping d =
   match d with
   | PairConstructor -> "pair"
+  | AndIntro -> "pair"
   | PairElimLeft -> "fst"
-  | PairElimRight -> "fst"
+  | PairElimRight -> "snd"
   | ApplicationElimination -> "app"
   | LambdaIntro _ -> "lam"
   | MuIntroduction _ -> "mu"
   | CommandIntro -> "throw"
+  | VariantIntroLeft -> "injL"
+  | VariantIntroRight -> "injR"
+  | OrElim _ -> "match"
   | Assumption x -> x
   | _ ->
       Printf.eprintf "Invalid symbolic mu mapping\n";
@@ -152,26 +157,22 @@ let print_bel_ctx (ctx : context) =
     | Empty -> ""
     | _ -> failwith "Complex Context not implemented yet for beluga"
 
-let map_var_string x =
-  let textRe = Str.regexp "\\\\textt?t?\\{(.*)}" in
-  match x with
-  | "\\alpha" -> "α"
-  | "\\beta" -> "β"
-  | "\\Gamma" -> "Γ"
-  | "\\Delta" -> "Δ"
-  | x -> Str.global_replace textRe "\\1" x
-
 let rec exprToBel expMap e =
   let inner = exprToBel expMap in
   match e with
-  | Name x -> map_var_string x
+  | Name x -> VariableUtils.map_var_string x
   | Lambda (x, b) | Mu (x, b) ->
-      Format.asprintf "%s (\\%s.%s)" (expMap e) (map_var_string x) (inner b)
+      Format.asprintf "%s (\\%s.%s)" (expMap e)
+        (VariableUtils.map_var_string x)
+        (inner b)
   | Pair (l, r) | Application (l, r) ->
       Format.asprintf "%s (%s) (%s)" (expMap e) (inner l) (inner r)
-  | First x | Second x -> Format.asprintf "%s (%s)" (expMap e) (inner x)
+  | First x | Second x | InjectLeft (_, x) | InjectRight (_, x) ->
+      Format.asprintf "%s (%s)" (expMap e) (inner x)
   | Command (CVar x, b) ->
-      Format.asprintf "%s (%s) (%s)" (expMap e) (map_var_string x) (inner b)
+      Format.asprintf "%s (%s) (%s)" (expMap e)
+        (VariableUtils.map_var_string x)
+        (inner b)
   | Command (CTop, b) -> Format.asprintf "%s cTop (%s)" (expMap e) (inner b)
   | _ -> Format.asprintf "?"
 
@@ -179,8 +180,8 @@ let rec typeToBel typeMap t =
   let inner = typeToBel typeMap in
   match t with
   | NamedType x -> x
-  | Prod (l, r) | Func (l, r) ->
-      Format.asprintf "(%s %s %s)" (typeMap t) (inner l) (inner r)
+  | Prod (l, r) | Func (l, r) | Sum (l, r) ->
+      Format.asprintf "(%s %s %s)" (inner l) (typeMap t) (inner r)
   | UnitType | BottomType -> typeMap t
   | _ -> Format.asprintf "?"
 
@@ -220,6 +221,8 @@ let proof_bel_base mapping (prf : proof) =
                  (inner pr true))
         | _, OrIntroLeft, [ p1 ]
         | _, OrIntroRight, [ p1 ]
+        | _, VariantIntroLeft, [ p1 ]
+        | _, VariantIntroRight, [ p1 ]
         | _, OrRight1, [ p1 ]
         | _, OrRight2, [ p1 ] ->
             wrap simple (Format.asprintf "%s %s" (mapping i) (inner p1 true))
@@ -233,7 +236,8 @@ let proof_bel_base mapping (prf : proof) =
         | _, LambdaIntro s, [ p1 ]
         | _, MuIntroduction s, [ p1 ] ->
             wrap simple
-              (Format.asprintf "%s \\%s.%s" (mapping i) (map_var_string s)
+              (Format.asprintf "%s \\%s.%s" (mapping i)
+                 (VariableUtils.map_var_string s)
                  (inner p1 false))
         | _, ImplElim, [ p1; a ] | _, ApplicationElimination, [ p1; a ] ->
             wrap simple
@@ -276,11 +280,25 @@ let proof_bel_base mapping (prf : proof) =
                  (inner p false) src)
         | { exp = Command (CVar x, _); _ }, CommandIntro, [ p1 ] ->
             wrap simple
-              (Format.asprintf "%s %s %s" (mapping i) (map_var_string x)
+              (Format.asprintf "%s %s %s" (mapping i)
+                 (VariableUtils.map_var_string x)
                  (inner p1 true))
         | { exp = Command (CTop, _); _ }, CommandIntro, [ p1 ] ->
             wrap simple
               (Format.asprintf "%s cTop %s" (mapping i) (inner p1 true))
+        | _, PairConstructor, [ p1; p2 ] ->
+            wrap simple
+              (Format.asprintf "%s %s %s" (mapping i) (inner p1 true)
+                 (inner p2 true))
+        | _, PairElimLeft, [ p1 ] | _, PairElimRight, [ p1 ] ->
+            wrap simple (Format.asprintf "%s %s" (mapping i) (inner p1 true))
+        | _, CCIntro, [] ->
+            "(lam \\x.mu \\α.throw α (app x (lam \\y.mu \\β.throw α y)))"
+        | _, CIntro, [] ->
+            "(lam \\x.mu \\α.throw cTop (app x (lam \\y.mu \\β.throw α y)))"
+        | _, AbortIntro, [] -> "(lam \\x.mu \\α.throw cTop x)"
+        | _, Law "DN", [] -> "dNeg"
+        | _, Law "Peirce", [] -> "prc"
         | _ -> "(?)")
     | Deduction s -> Format.asprintf "%s" (print_bel_deduction_name s)
     | _ -> "(?)"
@@ -305,8 +323,9 @@ let curry_bel_proof_base mapping (prf : proof) =
                   Top)
             in
             wrap simple
-              (Format.asprintf "%s \\%s.\\%s.%s" (mapping i) (map_var_string s)
-                 (map_var_string newVar)
+              (Format.asprintf "%s \\%s.\\%s.%s" (mapping i)
+                 (VariableUtils.map_var_string s)
+                 (VariableUtils.map_var_string newVar)
                  (inner p1 (StrMap.add s newVar typeMap) false))
         | _, MuIntroduction s, [ p1 ] ->
             let newVar =
@@ -315,21 +334,37 @@ let curry_bel_proof_base mapping (prf : proof) =
                   Top)
             in
             wrap simple
-              (Format.asprintf "%s \\%s.\\%s.%s" (mapping i) (map_var_string s)
-                 (map_var_string newVar)
+              (Format.asprintf "%s \\%s.\\%s.%s" (mapping i)
+                 (VariableUtils.map_var_string s)
+                 (VariableUtils.map_var_string newVar)
                  (inner p1 (StrMap.add s newVar typeMap) false))
         | { exp = Command (CVar x, _); _ }, CommandIntro, [ p1 ] ->
             wrap simple
               (Format.asprintf "%s %s %s" (mapping i)
-                 (StrMap.find x typeMap |> map_var_string)
+                 (StrMap.find x typeMap |> VariableUtils.map_var_string)
                  (inner p1 typeMap true))
         | { exp = Command (CTop, _); _ }, CommandIntro, [ p1 ] ->
             wrap simple
               (Format.asprintf "%s cTop %s" (mapping i) (inner p1 typeMap true))
-        | _, ApplicationElimination, [ p1; p2 ] ->
+        | _, ApplicationElimination, [ p1; p2 ]
+        | _, PairConstructor, [ p1; p2 ]
+        | _, AndIntro, [ p1; p2 ] ->
             wrap simple
               (Format.asprintf "%s %s %s" (mapping i) (inner p1 typeMap true)
                  (inner p2 typeMap true))
+        | _, OrIntroLeft, [ p1 ]
+        | _, OrIntroRight, [ p1 ]
+        | _, AndElimLeft, [ p1 ]
+        | _, AndElimRight, [ p1 ]
+        | _, PairElimLeft, [ p1 ]
+        | _, PairElimRight, [ p1 ] ->
+            wrap simple
+              (Format.asprintf "%s %s" (mapping i) (inner p1 typeMap true))
+        | _, CIntro, [] | _, Law "DN", [] ->
+            lam_mu_term_mapping (ExprUtils.CurryExpr.control ())
+        | _, CCIntro, [] -> lam_mu_term_mapping (ExprUtils.CurryExpr.cc ())
+        | _, AbortIntro, [] ->
+            lam_mu_term_mapping (ExprUtils.CurryExpr.abortExp ())
         | _ -> "(?)")
     | Deduction s -> Format.asprintf "%s" (print_bel_deduction_name s)
     | _ -> "(?)"

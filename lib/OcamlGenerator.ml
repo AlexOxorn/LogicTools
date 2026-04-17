@@ -13,9 +13,16 @@ let repeat_tailrec s n =
 let indentStr = repeat_tailrec "    "
 
 let exprToOcaml ?(withHeader = false) e =
+  let rec combineArgs e =
+    match e with
+    | Lambda (x, b) ->
+        let args, b2 = combineArgs b in
+        (x :: args, b2)
+    | b -> ([], b)
+  in
   let rec inner indent e =
     match e with
-    | Name a -> a
+    | Name a -> VariableUtils.remove_backslash a
     | TypeUnit -> "()"
     | Pair (l, r) ->
         Format.asprintf "(%s, %s)" (inner indent l) (inner indent r)
@@ -23,7 +30,11 @@ let exprToOcaml ?(withHeader = false) e =
     | Second e -> Format.asprintf "(snd %s)" (inner indent e)
     | Application (l, r) ->
         Format.asprintf "(%s %s)" (inner indent l) (inner indent r)
-    | Lambda (x, r) -> Format.asprintf "(fun %s -> %s)" x (inner indent r)
+    | Lambda _ as ll ->
+        let args, b = combineArgs ll in
+        Format.asprintf "(fun %s -> %s)"
+          (String.concat " " (List.map VariableUtils.remove_backslash args))
+          (inner indent b)
     | InjectLeft (_, x) -> Format.asprintf "(Left %s)" (inner indent x)
     | InjectRight (_, x) -> Format.asprintf "(Right %s)" (inner indent x)
     | Case (x, (ln, le), (rn, re)) ->
@@ -42,12 +53,15 @@ let exprToOcaml ?(withHeader = false) e =
     | Abort -> "raise "
     | Bottom -> "Not_found"
     | Let (x, p, b) ->
-        Format.asprintf "(let %s = %s in\n%s%s)" x
+        Format.asprintf "(let %s = %s in\n%s%s)"
+          (VariableUtils.remove_backslash x)
           (inner (indent + 1) p)
           (indentStr indent)
           (inner (indent + 1) b)
     | LetPair (x, y, p, b) ->
-        Format.asprintf "(let (%s, %s) = %s in\n%s%s)" x y
+        Format.asprintf "(let (%s, %s) = %s in\n%s%s)"
+          (VariableUtils.remove_backslash x)
+          (VariableUtils.remove_backslash y)
           (inner (indent + 1) p)
           (indentStr indent)
           (inner (indent + 1) b)
@@ -124,3 +138,29 @@ let ocamlTypeInference e =
 let exprToFormattedOcaml e = e |> exprToOcaml |> formatOcaml |> clearEmptyLines
 let exprToLatex e = e |> exprToFormattedOcaml |> wrapMinted
 let exprToVerbatim e = e |> exprToFormattedOcaml |> wrapVerbatim
+
+let test =
+ fun k0 ->
+  k0 (fun u k1 ->
+      k1 (fun v k2 ->
+          (fun k4 ->
+            k4 (fun x alpha k5 ->
+                ((fun k6 ->
+                   (fun k8 -> x k8) (fun k7 ->
+                       (k7 (fun k8 ->
+                            k8 (fun y beta k9 -> ((fun k10 -> y k10) alpha) k9)))
+                         k6))
+                   alpha)
+                  k5)) (fun k3 ->
+              (k3 (fun k4 ->
+                   k4 (fun w k5 ->
+                       (fun k7 -> v k7) (fun k6 ->
+                           (k6 (fun k7 ->
+                                k7 (fun x k8 ->
+                                    (fun k10 -> w k10) (fun k9 ->
+                                        (k9 (fun k10 ->
+                                             (fun k12 -> u k12) (fun k11 ->
+                                                 (k11 (fun k12 -> x k12)) k10)))
+                                          k8))))
+                             k5))))
+                k2)))
